@@ -1,10 +1,11 @@
-package capston2024.bustracker.model;
+package capston2024.bustracker.domain;
 
-public class CoordinateModel {
+public class BusStopCoordinateDomain {
+    private Long id;
     private String name;
     private double x;
     private double y;
-    public CoordinateModel(String name, double x, double y){
+    public BusStopCoordinateDomain(String name, double x, double y){
         this.name = name;
         this.x = x;
         this.y = y;
