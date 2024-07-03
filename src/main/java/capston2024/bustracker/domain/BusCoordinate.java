@@ -2,7 +2,7 @@ package capston2024.bustracker.domain;
 
 import org.springframework.data.mongodb.core.mapping.Document;
 
-@Document(collection = "bus")
+@Document(collection = "Bus")
 public class BusCoordinate extends BusStopCoordinate {
     private int busNum;
     public BusCoordinate(String name, double x, double y) {

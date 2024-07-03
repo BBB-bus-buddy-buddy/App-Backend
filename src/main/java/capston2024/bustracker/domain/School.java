@@ -2,7 +2,7 @@ package capston2024.bustracker.domain;
 
 import org.springframework.data.mongodb.core.mapping.Document;
 
-@Document(collection = "school")
+@Document(collection = "School")
 public class School {
     private String code;
     private String name;

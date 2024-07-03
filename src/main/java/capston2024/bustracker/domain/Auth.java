@@ -1,10 +1,13 @@
 package capston2024.bustracker.domain;
 import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-
-@Document(collection = "auth")
+@Setter
+@Getter
+@Document(collection = "Auth")
 public class Auth {
     @Id
     private Long id; // 구글로 로그인 한 유저의 고유 id
@@ -22,31 +25,8 @@ public class Auth {
         return isValid;
     }
 
-    public String getSchoolCode() {
-        return schoolCode;
-    }
-
-    public void setSchoolCode(String schoolCode) {
-        this.schoolCode = schoolCode;
-    }
-
     public void setValid(boolean valid) {
         isValid = valid;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
 }
