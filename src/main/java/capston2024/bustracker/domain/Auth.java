@@ -1,12 +1,20 @@
 package capston2024.bustracker.domain;
+import jakarta.validation.constraints.NotNull;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.util.ArrayList;
 
-public class AuthDomain {
-    private Long id; // 데이터베이스 자동생성 id
-    private String userId; // 실제 id
-    private String pw; // 실제 비번
+@Document(collection = "auth")
+public class Auth {
+    @Id
+    private Long id; // 구글로 로그인 한 유저의 고유 id
+    private String provider; // google
+    @NotNull
+    private String email; // 실제 id
+    @NotNull
     private String name; // 이름
+    private String picture;
+
     private String schoolCode; // 인증된 학교 코드
     private boolean isValid; // 검증상태 여부
 
@@ -26,14 +34,6 @@ public class AuthDomain {
         isValid = valid;
     }
 
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
     public Long getId() {
         return id;
     }
@@ -48,13 +48,5 @@ public class AuthDomain {
 
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public String getPw() {
-        return pw;
-    }
-
-    public void setPw(String pw) {
-        this.pw = pw;
     }
 }

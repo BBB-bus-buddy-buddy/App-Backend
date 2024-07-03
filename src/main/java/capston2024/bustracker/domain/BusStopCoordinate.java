@@ -1,11 +1,14 @@
 package capston2024.bustracker.domain;
 
-public class BusStopCoordinateDomain {
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document(collection = "bus-stop")
+public class BusStopCoordinate {
     private Long id;
     private String name;
     private double x;
     private double y;
-    public BusStopCoordinateDomain(String name, double x, double y){
+    public BusStopCoordinate(String name, double x, double y){
         this.name = name;
         this.x = x;
         this.y = y;
