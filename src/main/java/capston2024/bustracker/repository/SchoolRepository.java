@@ -1,12 +1,9 @@
 package capston2024.bustracker.repository;
 
-import capston2024.bustracker.domain.BusCoordinateDomain;
-import capston2024.bustracker.domain.BusStopCoordinateDomain;
-import capston2024.bustracker.domain.SchoolDomain;
+import capston2024.bustracker.domain.BusCoordinate;
+import capston2024.bustracker.domain.BusStopCoordinate;
+import capston2024.bustracker.domain.School;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface SchoolRepository {
-    SchoolDomain addSchool(SchoolDomain school);
-    boolean isInVerify(String code);
-    BusStopCoordinateDomain addBusStop(SchoolDomain school, BusStopCoordinateDomain busStop);
-    BusCoordinateDomain addBus(SchoolDomain school, BusCoordinateDomain bus);
+public interface SchoolRepository extends MongoRepository<School, String> {
 }

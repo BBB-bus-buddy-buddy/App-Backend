@@ -1,14 +1,12 @@
 package capston2024.bustracker.repository;
 
-import capston2024.bustracker.domain.AuthDomain;
-import capston2024.bustracker.domain.BusStopCoordinateDomain;
+import capston2024.bustracker.domain.Auth;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface AuthRepository { //구글 로그인
-    AuthDomain addMember(AuthDomain member);
-    boolean isVaildInVerifyCode(AuthDomain member, String code);
-    Optional<AuthDomain> findById(Long id);
-    List<AuthDomain> findAll();
+@Repository
+public interface AuthRepository extends MongoRepository<Auth, String> { //구글 로그인
 }

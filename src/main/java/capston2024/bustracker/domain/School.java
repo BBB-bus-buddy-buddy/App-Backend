@@ -1,6 +1,9 @@
 package capston2024.bustracker.domain;
 
-public class SchoolDomain {
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document(collection = "School")
+public class School {
     private String code;
     private String name;
 

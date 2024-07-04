@@ -1,13 +1,10 @@
 package capston2024.bustracker.repository;
 
-import capston2024.bustracker.domain.BusStopCoordinateDomain;
+import capston2024.bustracker.domain.BusStopCoordinate;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface BusStopCoordinateRepository {
-     BusStopCoordinateDomain addCoordinate(BusStopCoordinateDomain coordinate);
-     Optional<BusStopCoordinateDomain> findByName(String name);
-     Optional<BusStopCoordinateDomain> findByCoordinate(double x, double y);
-     List<BusStopCoordinateDomain> findAll();
+public interface BusStopCoordinateRepository extends MongoRepository<BusStopCoordinate, String> {
 }
