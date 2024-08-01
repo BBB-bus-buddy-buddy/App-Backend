@@ -2,6 +2,7 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.domain.Auth;
 import capston2024.bustracker.service.LoginService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
     LoginService loginService;
 
+    @Autowired
     public AuthController(LoginService loginService) {
         this.loginService = loginService;
     }
