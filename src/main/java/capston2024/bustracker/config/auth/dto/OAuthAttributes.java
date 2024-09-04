@@ -38,6 +38,9 @@ public class OAuthAttributes {
                 .build();
     }
 
+    /**
+     *  처음 가입 시 엔티티 부여
+     */
     public User toEntity() {
         return User.builder()
                 .name(name)

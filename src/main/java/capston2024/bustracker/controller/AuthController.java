@@ -1,8 +1,12 @@
 package capston2024.bustracker.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * ** 웹 MVC의 컨트롤러 역할 **
@@ -20,7 +24,6 @@ public class AuthController {
     public String privatePage() {
         return "privatePage";
     }
-
 
 //    @PostMapping("/api/authVerify")
 //    public boolean getAuthVerify(@RequestParam("id") String id, @RequestParam("pw") String pw, Model model){

@@ -5,6 +5,9 @@ import lombok.Getter;
 
 import java.io.Serializable;
 
+/**
+ * 인증된 사용자 정보를 모아 놓는 클래스
+ */
 @Getter
 public class SessionUser implements Serializable {
     private String name;

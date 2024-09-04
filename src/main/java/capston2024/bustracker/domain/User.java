@@ -13,7 +13,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Setter
 @Getter
-@Document(collection = "User")
+@Document(collection = "Auth")
 @NoArgsConstructor
 public class User {
 
