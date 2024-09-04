@@ -1,27 +1,23 @@
 package capston2024.bustracker.controller;
 
-import capston2024.bustracker.domain.Auth;
-import capston2024.bustracker.service.LoginService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 /**
+ * ** 웹 MVC의 컨트롤러 역할 **
  * 계정 정보 유효성 검사
  */
 @RestController //@Controller + @ResponseBody
-@RequestMapping(value = "/login/oauth2", produces = "application/json")
+@RequestMapping(value = "/login/google", produces = "application/json")
 public class AuthController {
-    LoginService loginService;
-
-    @Autowired
-    public AuthController(LoginService loginService) {
-        this.loginService = loginService;
+    @GetMapping("/loginForm")
+    public String home() {
+        return "loginForm";
     }
 
-    @GetMapping("/code/{registrationId}")
-    public void googleLogin(@RequestParam String code, @PathVariable String registrationId){
-        loginService.socialLogin(code, registrationId);
+    @GetMapping("/private")
+    public String privatePage() {
+        return "privatePage";
     }
 
 

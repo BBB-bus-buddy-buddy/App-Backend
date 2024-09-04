@@ -1,8 +1,7 @@
 package capston2024.bustracker.domain;
+import capston2024.bustracker.config.status.Role;
 import jakarta.validation.constraints.NotNull;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import net.minidev.json.annotate.JsonIgnore;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -14,18 +13,36 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Setter
 @Getter
-@Document(collection = "Auth")
-public class Auth {
+@Document(collection = "User")
+@NoArgsConstructor
+public class User {
+
+    @Builder
+    public User(String name, String email, String picture, Role role){
+        this.name = name;
+        this.email = email;
+        this.picture = picture;
+        this.role = role;
+    }
+
+    public User update(String name, String picture){
+        this.name = name;
+        this.picture = picture;
+
+        return this;
+    }
+
     public enum AuthProvider {
         google
     }
     @Id
-    private String id;
+    @Generated
+    private Long id;
     @NotNull
-    private String username; // 이름
+    private String name; // 이름
     @NotNull
     private String email; // 이메일
-    private String imgUrl;
+    private String picture;
     private Role role;
 
     @JsonIgnore
@@ -36,4 +53,8 @@ public class Auth {
 
     private String schoolCode; // 인증된 학교 코드
     private boolean isValid = false; // 검증상태 여부
+
+    public String getRoleKey(){
+        return this.role.getKey();
+    }
 }
