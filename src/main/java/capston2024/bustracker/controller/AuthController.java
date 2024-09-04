@@ -1,14 +1,15 @@
 package capston2024.bustracker.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * ** 웹 MVC의 컨트롤러 역할 **
  * 계정 정보 유효성 검사
  */
-@RestController //@Controller + @ResponseBody
-@RequestMapping(value = "/login/google", produces = "application/json")
+@Controller //@Controller + @ResponseBody
+//@RequestMapping(value = "/login/google", produces = "application/json")
 public class AuthController {
     @GetMapping("/loginForm")
     public String home() {

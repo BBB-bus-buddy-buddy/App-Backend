@@ -36,8 +36,7 @@ public class User {
         google
     }
     @Id
-    @Generated
-    private Long id;
+    private String id;
     @NotNull
     private String name; // 이름
     @NotNull
