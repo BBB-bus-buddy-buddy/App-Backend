@@ -1,16 +1,16 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.auth.dto.GoogleInfoDto;
-import capston2024.bustracker.service.JwtService;
 import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -21,31 +21,36 @@ import java.util.Objects;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    JwtService jwtService;
-
     @GetMapping("/login")
     public void login(HttpServletResponse response) throws IOException, java.io.IOException {
         response.sendRedirect("/oauth2/authorization/google");
     }
 
     @GetMapping("/oauth2/code/google")
-    public ResponseEntity<String> googleCallback(@AuthenticationPrincipal OAuth2User oAuth2User) {
+    public ResponseEntity<GoogleInfoDto> googleCallback(@AuthenticationPrincipal OAuth2User oAuth2User) {
         GoogleInfoDto userInfo = new GoogleInfoDto(Objects.requireNonNull(oAuth2User.getAttribute("user")));
-        String token = jwtService.generateToken(userInfo);
-        return ResponseEntity.ok(token);
+        return ResponseEntity.ok(userInfo);
+    }
+
+    @GetMapping("/loginInfo")
+    public String oauthLoginInfo(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        if (oAuth2User == null) {
+            return "User not authenticated";
+        }
+        //oAuth2User.toString() 예시 : Name: [2346930276], Granted Authorities: [[USER]], User Attributes: [{id=2346930276, provider=kakao, name=김준우, email=bababoll@naver.com}]
+        //attributes.toString() 예시 : {id=2346930276, provider=kakao, name=김준우, email=bababoll@naver.com}
+        Map<String, Object> attributes = oAuth2User.getAttributes();
+        return attributes.toString();
     }
 
     @GetMapping("/user")
-    public ResponseEntity<GoogleInfoDto> getUser(@RequestHeader("Authorization") String token) {
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-            if (jwtService.validateToken(token)) {
-                GoogleInfoDto userInfo = jwtService.getUserInfoFromToken(token);
-                return ResponseEntity.ok(userInfo);
-            }
+    public ResponseEntity<GoogleInfoDto> getUser(@AuthenticationPrincipal OAuth2User oAuth2User) {
+        if (oAuth2User == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        GoogleInfoDto userInfo = new GoogleInfoDto(Objects.requireNonNull(oAuth2User.getAttribute("user")));
+
+        return ResponseEntity.ok(userInfo);
     }
     @GetMapping("/logout")
     public ResponseEntity<Void> logout() {

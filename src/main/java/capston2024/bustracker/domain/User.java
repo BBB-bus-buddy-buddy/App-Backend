@@ -39,10 +39,10 @@ public class User extends BaseEntity{
     public User update(String name, String picture) {
         this.name = name;
         this.picture = picture;
-        return new User();
+        return this;
     }
 
     public String getRoleKey() {
-        return role.getKey();
+        return this.role.getKey();
     }
 }
