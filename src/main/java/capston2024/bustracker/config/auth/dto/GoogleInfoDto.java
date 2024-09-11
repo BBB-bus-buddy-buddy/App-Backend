@@ -14,9 +14,9 @@ public class GoogleInfoDto {
     private String email;
     private String picture;
 
-    public GoogleInfoDto(String email, String name, String picture) {
-        this.name = name;
-        this.email = email;
-        this.picture = picture;
+    public GoogleInfoDto(User user) {
+        this.name = user.getName();
+        this.email = user.getEmail();
+        this.picture = user.getPicture();
     }
 }

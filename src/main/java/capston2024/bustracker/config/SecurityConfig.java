@@ -1,5 +1,6 @@
 package capston2024.bustracker.config;
 
+import capston2024.bustracker.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,12 +20,10 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Configuration
 @Slf4j
 public class SecurityConfig {
-    @Autowired
-    private JwtFilter jwtFilter;
+    private final AuthService authService;
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(withDefaults())
@@ -32,8 +31,13 @@ public class SecurityConfig {
                         .requestMatchers("*").permitAll()
                         .anyRequest().authenticated()// 나머지는 인증 필요
                 )
-                .headers((headers -> headers
-                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::disable)));
+                .oauth2Login(oauth2 -> oauth2
+                        .loginPage("/loginForm") // 로그인 페이지 설정
+                        .defaultSuccessUrl("/") // 로그인 성공 시 이동할 페이지
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(authService) // 사용자 정보 서비스를 customOAuth2UserService로 설정
+                        )
+                );
 
         return http.build();
     }
