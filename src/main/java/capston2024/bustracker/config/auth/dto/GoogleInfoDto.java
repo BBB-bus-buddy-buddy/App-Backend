@@ -9,14 +9,14 @@ import java.io.Serializable;
  * 인증된 사용자 정보를 모아 놓는 클래스
  */
 @Getter
-public class SessionUser implements Serializable {
+public class GoogleInfoDto {
     private String name;
     private String email;
     private String picture;
 
-    public SessionUser(User user) {
-        this.name = user.getName();
-        this.email = user.getEmail();
-        this.picture = user.getPicture();
+    public GoogleInfoDto(String email, String name, String picture) {
+        this.name = name;
+        this.email = email;
+        this.picture = picture;
     }
 }
