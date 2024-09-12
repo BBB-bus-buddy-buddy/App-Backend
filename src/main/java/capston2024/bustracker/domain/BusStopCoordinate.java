@@ -8,7 +8,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "Station")
 public class BusStopCoordinate {
     private Long id;
-
     private String name;
     private double x;
     private double y;
