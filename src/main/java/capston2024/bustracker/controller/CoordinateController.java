@@ -2,11 +2,15 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.domain.BusCoordinate;
 import capston2024.bustracker.domain.BusStopCoordinate;
+import capston2024.bustracker.handler.BusCoordinateWebSocketHandler;
+import capston2024.bustracker.repository.BusCoordinateRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 정류장 좌표 전송 (갈아엎는게 좋아보임)
@@ -14,9 +18,15 @@ import java.util.List;
 @RestController
 public class CoordinateController {
 
+    @Autowired
+    private BusCoordinateRepository repository;
     private final ArrayList<BusStopCoordinate> BUS_STOP_MODEL = new ArrayList<>();
     private final ArrayList<BusStopCoordinate> MY_BUS_STOP_MODEL = new ArrayList<>();
-    private final ArrayList<BusCoordinate> BUS_MODEL = new ArrayList<>();
+
+    @GetMapping("/api/locations/{busId}")
+    public List<BusCoordinate> getLocations(@PathVariable String busId) {
+        return repository.findByBusIdOrderByTimestampDesc(busId);
+    }
 
     @PostMapping("/api/allBusStopCoordinate") // Post (학교 UID)
     public List<BusStopCoordinate> getBusStopCoordinate(@RequestParam("uid") String uid, Model model){
@@ -32,9 +42,4 @@ public class CoordinateController {
         return MY_BUS_STOP_MODEL;
     }
 
-    @PostMapping("/api/busCoordinate")
-    public List<BusCoordinate> getBusCoordinate(Model model){
-        //데이터베이스에서 해당 학교정보의 uid를 가지고 해당 버스의 위치를 전송
-        return BUS_MODEL;
-    }
 }
