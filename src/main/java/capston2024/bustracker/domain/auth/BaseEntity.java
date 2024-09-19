@@ -1,4 +1,4 @@
-package capston2024.bustracker.domain;
+package capston2024.bustracker.domain.auth;
 
 import lombok.Getter;
 import org.springframework.data.annotation.CreatedDate;

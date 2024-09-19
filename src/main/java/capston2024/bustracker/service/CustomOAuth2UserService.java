@@ -1,8 +1,10 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.OAuthAttributesDTO;
-import capston2024.bustracker.config.dto.GoogleInfoDto;
-import capston2024.bustracker.domain.User;
+import capston2024.bustracker.domain.auth.OAuthAttributes;
+import capston2024.bustracker.config.dto.GoogleInfoDTO;
+import capston2024.bustracker.domain.auth.User;
+import capston2024.bustracker.domain.auth.UserCreator;
+import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +17,6 @@ import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 
@@ -25,9 +26,9 @@ import java.util.Collections;
  */
 @RequiredArgsConstructor
 @Service
-public class AuthService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
-    private final UserRepository userRepository;
+public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
     private final HttpSession httpSession;
+    private final AuthenticationService authenticationService;
 
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
@@ -39,24 +40,20 @@ public class AuthService implements OAuth2UserService<OAuth2UserRequest, OAuth2U
         //userNameAttributeName - 이후 네이버 로그인과 구글 로그인을 동시 지원하기 위해 사용
         String userNameAttributeName = userRequest.getClientRegistration().getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName();
 
-        OAuthAttributesDTO attributes = OAuthAttributesDTO.of(registrationId, userNameAttributeName, oAuth2User.getAttributes());
+        OAuthAttributes attributes = OAuthAttributes.of(registrationId, userNameAttributeName, oAuth2User.getAttributes());
 
-        User user = saveOrUpdate(attributes);
+        User user;
+        try {
+            user = authenticationService.authenticateUser(attributes);
+        } catch (AdditionalAuthenticationFailedException e) {
+            throw new RuntimeException(e);
+        }
 
-        httpSession.setAttribute("user", new GoogleInfoDto(user));
+        httpSession.setAttribute("user", new GoogleInfoDTO(user));
 
         return new DefaultOAuth2User(Collections.singleton(new SimpleGrantedAuthority(user.getRoleKey())),
                 attributes.getAttributes(),
                 attributes.getNameAttributeKey());
-    }
-
-    @Transactional
-    protected synchronized User saveOrUpdate(OAuthAttributesDTO attributes) {
-        User user = userRepository.findByEmail(attributes.getEmail())
-                .map(entity -> entity.update(attributes.getName(), attributes.getPicture()))
-                .orElse(attributes.toEntity());
-
-        return userRepository.save(user);
     }
 
 }
