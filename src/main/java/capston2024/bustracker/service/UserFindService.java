@@ -5,6 +5,7 @@ import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,9 +15,9 @@ import java.util.Optional;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class UserFindService {
-    @Autowired
-    UserRepository userRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public Optional<User> findUserByEmail(String email){
