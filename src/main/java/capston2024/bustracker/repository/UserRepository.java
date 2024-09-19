@@ -1,6 +1,6 @@
 package capston2024.bustracker.repository;
 
-import capston2024.bustracker.domain.User;
+import capston2024.bustracker.domain.auth.User;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
