@@ -35,9 +35,15 @@ public class AuthController {
         return ResponseEntity.ok(authenticationService.getUserDetails(principal));
     }
 
-    @PostMapping("/school")
-    public ResponseEntity<?> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException {
-        boolean isAuthenticated = authenticationService.performSchoolAuthentication(principal, request.getStudentId(), request.getPassword());
+    @PostMapping("/school/mail")
+    public ResponseEntity<?> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
+        boolean isSendMail = authenticationService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
+        return ResponseEntity.ok(Map.of("sendMail", isSendMail));
+    }
+
+    @PostMapping("/school/code")
+    public ResponseEntity<?> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException, java.io.IOException {
+        boolean isAuthenticated = authenticationService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
         return ResponseEntity.ok(Map.of("authenticated", isAuthenticated));
     }
 

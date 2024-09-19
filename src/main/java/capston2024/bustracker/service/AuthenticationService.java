@@ -12,12 +12,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.util.Map;
 
 @Service
@@ -38,20 +38,30 @@ public class AuthenticationService {
     }
 
     @Transactional
-    public boolean performSchoolAuthentication(OAuth2User principal, String studentId, String password) throws AdditionalAuthenticationFailedException {
+    public boolean performSchoolAuthentication(OAuth2User principal, String studentEmail, String schoolName, int code) throws AdditionalAuthenticationFailedException, IOException {
         User user = getUserFromPrincipal(principal);
         if (user == null) {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
 
-        boolean isAuthenticated = additionalAuthApi.authenticate(user, studentId, password);
+        boolean isAuthenticated = additionalAuthApi.authenticate(studentEmail, schoolName, code);
         if (isAuthenticated) {
             user.updateRole(Role.USER);
             userRepository.save(user);
             return true;
         } else {
-            throw new AdditionalAuthenticationFailedException(STR."기관 인증 실패: \{user.getEmail()}");
+            throw new AdditionalAuthenticationFailedException("기관 인증 실패: ", user.getEmail());
         }
+    }
+
+    @Transactional
+    public boolean sendToSchoolEmail(OAuth2User principal, String schoolEmail, String schoolName) {
+        User user = getUserFromPrincipal(principal);
+        if (user == null) {
+            throw new RuntimeException("존재하지 않는 회원입니다.");
+        }
+
+        return additionalAuthApi.sendToEmail(schoolEmail, schoolName);
     }
 
     public void logout(HttpServletRequest request, HttpServletResponse response) {

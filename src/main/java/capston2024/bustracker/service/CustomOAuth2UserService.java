@@ -42,12 +42,7 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
 
         OAuthAttributes attributes = OAuthAttributes.of(registrationId, userNameAttributeName, oAuth2User.getAttributes());
 
-        User user;
-        try {
-            user = authenticationService.authenticateUser(attributes);
-        } catch (AdditionalAuthenticationFailedException e) {
-            throw new RuntimeException(e);
-        }
+        User user = authenticationService.authenticateUser(attributes);
 
         httpSession.setAttribute("user", new GoogleInfoDTO(user));
 

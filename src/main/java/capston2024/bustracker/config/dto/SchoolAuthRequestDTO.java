@@ -5,6 +5,7 @@ import lombok.Setter;
 
 @Getter @Setter
 public class SchoolAuthRequestDTO {
-    private String studentId;
-    private String password;
+    private String schoolEmail;
+    private String schoolName;
+    private int code;
 }
