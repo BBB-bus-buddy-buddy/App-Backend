@@ -7,4 +7,5 @@ import java.util.List;
 import java.util.Optional;
 
 public interface BusCoordinateRepository extends MongoRepository<BusCoordinate, String> {
+    List<BusCoordinate> findByBusIdOrderByTimestampDesc(String busId);
 }
