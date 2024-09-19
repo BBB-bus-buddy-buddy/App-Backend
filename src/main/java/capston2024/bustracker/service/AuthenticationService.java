@@ -1,12 +1,10 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.status.Role;
-import capston2024.bustracker.domain.auth.AdditionalAuthAPI;
-import capston2024.bustracker.domain.auth.OAuthAttributes;
-import capston2024.bustracker.domain.auth.User;
-import capston2024.bustracker.domain.auth.UserCreator;
+import capston2024.bustracker.domain.auth.*;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.repository.UserRepository;
+import com.fasterxml.jackson.core.json.UTF8DataInputJsonParser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +45,7 @@ public class AuthenticationService {
         boolean isAuthenticated = additionalAuthApi.authenticate(studentEmail, schoolName, code);
         if (isAuthenticated) {
             user.updateRole(Role.USER);
+            user.setOrganizationId(SchoolIdGenerator.generateSchoolId(schoolName));
             userRepository.save(user);
             return true;
         } else {

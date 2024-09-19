@@ -25,7 +25,7 @@ public class User extends BaseEntity {
     private String email; // 이메일
     private String picture;
     private Role role;
-    private String organization_id; // 기관 인증 Id
+    private String organizationId; // 기관 인증 Id
 
     public void updateRole(Role role){
         this.role = role;
