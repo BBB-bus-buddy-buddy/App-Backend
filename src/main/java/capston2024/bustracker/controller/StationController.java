@@ -3,6 +3,8 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.service.StationService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,24 +16,20 @@ import java.util.Optional;
 @Slf4j
 public class StationController {
 
+    @Autowired
     private StationService stationService;
-
-    public StationController(StationService stationService) {
-        this.stationService = stationService;
-    }
 
     // 특정 정류장 조회
     @GetMapping("/station")
-    public String getStation(@RequestParam String name) {
+    public ResponseEntity<Station> getStation(@RequestParam String name) {
         log.info("가져 올 버스정류장의 아이디: {}", name);
-        Optional<Station> stations = stationService.getStation(name);
+        Optional<Station> station = stationService.getStation(name);
 
-        if (stations.isEmpty()) {
+        if (station.isEmpty()) {
             log.warn("Station not found with name: {}", name);
-            return "false";
         }
 
-        return "ok"; // 좌표 리스트 반환
+        return ResponseEntity.ok(station.get()); // 좌표 리스트 반환
     }
 
     // 모든 정류장 조회

@@ -6,5 +6,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.Optional;
 
 public interface BusRepository extends MongoRepository<Bus, String> {
-    Optional<Bus> findById(String id); // 버스 아이디로 버스 조회
+    Optional<Bus> findByIdOrderByTimestampDesc(String id); // 버스 아이디로 버스 조회
 }

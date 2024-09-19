@@ -19,9 +19,9 @@ public class StationService {
         this.stationRepository = stationRepository;
     }
 
-    // 특정 id에 해당하는 정류장의 좌표를 가져옴
+    // 특정 name에 해당하는 정류장의 정보를 반환
     public Optional<Station> getStation(String name) {
-        log.info("station finding....");
+        log.info("{} 정류장을 찾는 중입니다....", name);
         return stationRepository.findByName(name);
     }
 
