@@ -1,6 +1,5 @@
 package capston2024.bustracker.controller;
 
-import capston2024.bustracker.config.dto.GoogleInfoDTO;
 import capston2024.bustracker.config.dto.SchoolAuthRequestDTO;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.service.AuthenticationService;

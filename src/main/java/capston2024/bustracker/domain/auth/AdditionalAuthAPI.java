@@ -27,4 +27,13 @@ public class AdditionalAuthAPI {
         }
         return true;
     }
+
+    public boolean checkBySchoolName(String schoolName){
+        try {
+            UnivCert.check(schoolName);
+        } catch (IOException e){
+            return false;
+        }
+        return true;
+    }
 }
