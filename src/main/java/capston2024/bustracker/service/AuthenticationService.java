@@ -4,7 +4,6 @@ import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.auth.*;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.repository.UserRepository;
-import com.fasterxml.jackson.core.json.UTF8DataInputJsonParser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
