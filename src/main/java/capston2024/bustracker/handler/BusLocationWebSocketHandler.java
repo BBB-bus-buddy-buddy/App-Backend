@@ -32,7 +32,6 @@ public class BusLocationWebSocketHandler extends TextWebSocketHandler {
         locationDTO.setTimestamp(Instant.now());
         // 형변환: LocationDTO -> Bus
         Bus bus = new Bus();
-        bus.setSeat(locationDTO.getSeat());
         bus.setLocation(new GeoJsonPoint(locationDTO.getLongitude(), locationDTO.getLatitude()));
         bus.setTimestamp(locationDTO.getTimestamp());
         repository.save(bus);
