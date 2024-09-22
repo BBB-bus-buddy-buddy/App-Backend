@@ -1,7 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.domain.Station;
-import capston2024.bustracker.service.StationFindService;
+import capston2024.bustracker.service.StationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,16 +16,16 @@ import java.util.List;
 @RequestMapping("/api/station")
 public class StationController {
 
-    private final StationFindService stationFindService;
-    public StationController(StationFindService stationFindService) {
-        this.stationFindService = stationFindService;
+    private final StationService stationService;
+    public StationController(StationService stationService) {
+        this.stationService = stationService;
     }
 
     // 정류장 이름 or ID로 조회
     @GetMapping("/find")
     public ResponseEntity<List<Station>> getStation(@RequestParam String name) {
         log.info("가져 올 버스정류장의 아이디: {}", name);
-        List<Station> stations = stationFindService.getStationByName(name);
+        List<Station> stations = stationService.getStation(name);
         if (stations.isEmpty()) {
             log.warn("해당 정류장을 찾을 수 없습니다: {}", name);
         }
@@ -37,7 +37,7 @@ public class StationController {
     @GetMapping("/all")
     public ResponseEntity<List<Station>> getAllStation() {
         log.info("클라이언트 요청: 모든 정류장 조회");
-        List<Station> stations = stationFindService.getAllStations();
+        List<Station> stations = stationService.getAllStations();
         if (stations.isEmpty()) {
             log.warn("정류장을 찾을 수 없습니다");
         }

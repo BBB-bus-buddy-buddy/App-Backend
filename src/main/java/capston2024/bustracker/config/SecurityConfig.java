@@ -1,18 +1,14 @@
 package capston2024.bustracker.config;
 
-import capston2024.bustracker.service.AuthService;
+import capston2024.bustracker.service.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
@@ -21,7 +17,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Configuration
 @Slf4j
 public class SecurityConfig {
-    private final AuthService authService;
+    private final CustomOAuth2UserService customOAuth2UserService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -37,7 +33,7 @@ public class SecurityConfig {
                         .loginPage("/api/auth/login") // 로그인 페이지 설정
                         .defaultSuccessUrl("/") // 로그인 성공 시 이동할 페이지
                         .userInfoEndpoint(userInfo -> userInfo
-                                .userService(authService)
+                                .userService(customOAuth2UserService)
                         )
                 );
 

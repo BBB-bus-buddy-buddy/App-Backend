@@ -1,15 +1,11 @@
 package capston2024.bustracker.config.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.Instant;
 
 @Getter @Setter
-@AllArgsConstructor
-@NoArgsConstructor
+@RequiredArgsConstructor
 public class LocationDTO {
     private double latitude;  // 위도
     private double longitude; // 경도

@@ -1,4 +1,4 @@
-package capston2024.bustracker.domain;
+package capston2024.bustracker.domain.auth;
 import capston2024.bustracker.config.status.Role;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -10,11 +10,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
  */
 
 
-@Setter
-@Getter
+@Setter @Getter
 @Document(collection = "Auth")
 @NoArgsConstructor
-public class User extends BaseEntity{
+@AllArgsConstructor
+@Builder
+public class User extends BaseEntity {
     @Id
     private String id;
 
@@ -24,22 +25,10 @@ public class User extends BaseEntity{
     private String email; // 이메일
     private String picture;
     private Role role;
+    private String organizationId; // 기관 인증 Id
 
-    private String schoolCode; // 인증된 학교 코드
-    private boolean isValid = false; // 검증상태 여부
-
-    @Builder
-    public User(String name, String email, String picture, Role role) {
-        this.name = name;
-        this.email = email;
-        this.picture = picture;
+    public void updateRole(Role role){
         this.role = role;
-    }
-
-    public User update(String name, String picture) {
-        this.name = name;
-        this.picture = picture;
-        return this;
     }
 
     public String getRoleKey() {

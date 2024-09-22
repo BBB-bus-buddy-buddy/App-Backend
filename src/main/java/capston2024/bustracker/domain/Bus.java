@@ -1,9 +1,6 @@
 package capston2024.bustracker.domain;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -15,6 +12,7 @@ import java.util.List;
 @Getter @Setter
 @AllArgsConstructor // 모든 필드를 받는 생성자 생성
 @NoArgsConstructor // 기본 생성자 생성
+@Builder
 public class Bus {
 
     @Id
