@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Creation - Admin Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-group-busNumber, .form-group-route, .form-group-CreateBtn {
+            margin-bottom: 15px;
+        }
+        .form-group-busNumber label, .form-group-route label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group-busNumber input, .station-name {
+            width: 80%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 5px;
+        }
+        .form-group-CreateBtn button {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-group-CreateBtn button:hover {
+            background-color: #218838;
+        }
+        .station-item {
+            margin-bottom: 10px;
+        }
+        .station-item button {
+            background-color: #dc3545;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .station-item button:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Create a Bus</h2>
+    <div class="form-group-busNumber">
+        <label for="busNumber">Bus Number</label>
+        <input type="text" id="busNumber" placeholder="Enter Bus Number">
+    </div>
+
+    <div class="form-group-route">
+        <label for="stationList">Bus Route (Stations)</label>
+        <div id="stationList">
+            <div class="station-item">
+                <input type="text" class="station-name" placeholder="Enter Station Name">
+                <button type="button" onclick="removeStation(this)">-</button>
+            </div>
+        </div>
+        <button type="button" onclick="addStation()">+ Add Station</button>
+    </div>
+
+    <div class="form-group-CreateBtn">
+        <button onclick="createBus()">Create Bus</button>
+    </div>
+</div>
+
+<script>
+    // Function to add a new station input field
+    function addStation() {
+        const stationList = document.getElementById('stationList');
+        const stationItem = document.createElement('div');
+        stationItem.className = 'station-item';
+        stationItem.innerHTML = `
+                <input type="text" class="station-name" placeholder="Enter Station Name">
+                <button type="button" onclick="removeStation(this)">-</button>
+            `;
+        stationList.appendChild(stationItem);
+    }
+
+    // Function to remove a station input field
+    function removeStation(button) {
+        const stationList = document.getElementById('stationList');
+        stationList.removeChild(button.parentElement);
+    }
+
+    // Function to create a new bus
+    function createBus() {
+        const busNumber = document.getElementById('busNumber').value;
+        const stationNames = Array.from(document.getElementsByClassName('station-name'))
+            .map(input => input.value.trim())
+            .filter(station => station.length > 0); // Filter out empty stations
+
+        if (!busNumber || stationNames.length === 0) {
+            alert("Please provide both bus number and at least one station.");
+            return;
+        }
+
+        const data = {
+            busNumber: busNumber,
+            stationNames: stationNames
+        };
+
+        fetch('http://localhost:8080/api/buses/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(data => {
+                alert("Bus created successfully!");
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                alert("Failed to create bus.");
+                console.error('Error:', error);
+            });
+    }
+</script>
+</body>
+</html>
