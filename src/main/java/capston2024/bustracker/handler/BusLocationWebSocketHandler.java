@@ -5,6 +5,7 @@ import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.repository.BusRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;

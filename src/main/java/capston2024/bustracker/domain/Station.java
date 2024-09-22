@@ -18,4 +18,5 @@ public class Station {
     private String id;
     private String name;
     private GeoJsonPoint location;
+    private String organizationId;
 }

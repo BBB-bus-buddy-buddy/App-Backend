@@ -3,41 +3,45 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.service.StationService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @Slf4j
+@RequestMapping("/api/station")
 public class StationController {
 
-    @Autowired
-    private StationService stationService;
+    private final StationService stationService;
+    public StationController(StationService stationService) {
+        this.stationService = stationService;
+    }
 
-    // 특정 정류장 조회
-    @GetMapping("/station")
-    public ResponseEntity<Station> getStation(@RequestParam String name) {
+    // 정류장 이름 or ID로 조회
+    @GetMapping("/find")
+    public ResponseEntity<List<Station>> getStation(@RequestParam String name) {
         log.info("가져 올 버스정류장의 아이디: {}", name);
-        Optional<Station> station = stationService.getStation(name);
-
-        if (station.isEmpty()) {
-            log.warn("Station not found with name: {}", name);
+        List<Station> stations = stationService.getStation(name);
+        if (stations.isEmpty()) {
+            log.warn("해당 정류장을 찾을 수 없습니다: {}", name);
         }
-
-        return ResponseEntity.ok(station.get()); // 좌표 리스트 반환
+        log.info("조회된 정류장 수: {}", stations.size());  // 가져온 정류장 개수를 출력
+        return ResponseEntity.ok(stations);
     }
 
     // 모든 정류장 조회
-    @GetMapping("/station/all")
-    public List<Station> getAllStation() {
+    @GetMapping("/all")
+    public ResponseEntity<List<Station>> getAllStation() {
         log.info("클라이언트 요청: 모든 정류장 조회");
         List<Station> stations = stationService.getAllStations();
+        if (stations.isEmpty()) {
+            log.warn("정류장을 찾을 수 없습니다");
+        }
         log.info("조회된 정류장 수: {}", stations.size());  // 가져온 정류장 개수를 출력
-        return stations;
+        return ResponseEntity.ok(stations);
     }
 }

@@ -36,8 +36,10 @@ out/
 ### VS Code ###
 .vscode/
 
-### env ###
-src/main/resources/env.properties
+### env, key ###
+/src/main/resources/env.properties
+/src/main/resources/application-API-KEY.properties
+/src/main/resources/application-auth.properties
 
 ## Mac meta_data
 .DS_Store

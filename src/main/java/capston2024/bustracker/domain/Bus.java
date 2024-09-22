@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.List;
 
 @Document(collection = "Bus")
 @Getter @Setter
@@ -16,7 +17,10 @@ public class Bus {
 
     @Id
     private String id; // MongoDB에서 자동 생성될 _id
-    private int seat;
+    private String busNumber;
+    private int totalSeats; // 전체 좌석
+    private int occupiedSeats; // 앉은 좌석 수(남은 좌석 수는 프론트에서 연산하여 출력. 혹은 occupiedSeats/totalSeats로 출력)
     private GeoJsonPoint location; // 좌표 정보 (GeoJSON 형식)
-    private Instant timestamp;
+    private List<String> stationsNames; // 버스의 노선(정류장 이름 목록)
+    private Instant timestamp; // 위치 정보 최신화
 }

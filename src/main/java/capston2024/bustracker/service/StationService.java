@@ -6,11 +6,9 @@ import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @Slf4j
@@ -20,10 +18,10 @@ public class StationService {
     private final StationRepository stationRepository;
 
     // 특정 name에 해당하는 정류장의 정보를 반환
-    public Optional<Station> getStation(String name) {
+    public List<Station> getStation(String name) {
         log.info("{} 정류장을 찾는 중입니다....", name);
         try {
-            return stationRepository.findByName(name);
+            return stationRepository.findByNameContaining(name);
         } catch (RuntimeException e){
             throw new BusinessException(ErrorCode.GENERAL_ERROR);
         }

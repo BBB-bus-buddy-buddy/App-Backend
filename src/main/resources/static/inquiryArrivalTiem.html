@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>버스 도착 예정 시간</title>
+    <script type="text/javascript"
+            src="//dapi.kakao.com/v2/maps/sdk.js?appkey`${kakao-rest-api-key}=services"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            width: 80%;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #map {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>사설 버스 도착 예정 시간</h1>
+    <form action="http://localhost:8080/arrival-time" method="GET">
+        <div class="form-group">
+            <label for="origin">출발지</label>
+            <input type="text" id="origin" name="origin" placeholder="출발지 좌표 (예: 127.111202,37.394912)" required>
+        </div>
+        <div class="form-group">
+            <label for="destination">목적지</label>
+            <input type="text" id="destination" name="destination" placeholder="목적지 좌표 (예: 127.111202,37.394912)"
+                   required>
+        </div>
+        <button type="submit">도착 시간 계산</button>
+    </form>
+
+    <div id="map"></div>
+</div>
+
+<script>
+    var mapContainer = document.getElementById('map'),
+        mapOption = {
+            center: new kakao.maps.LatLng(37.566826, 126.9786567), // 기본 지도 중심좌표 (서울)
+            level: 3 // 확대 수준
+        };
+
+    var map = new kakao.maps.Map(mapContainer, mapOption);
+
+    // 주소-좌표 변환 객체를 생성합니다
+    var geocoder = new kakao.maps.services.Geocoder();
+
+    var marker = new kakao.maps.Marker(), // 클릭한 위치를 표시할 마커
+        infowindow = new kakao.maps.InfoWindow({zindex: 1}); // 클릭한 위치에 대한 주소를 표시할 인포윈도우
+
+    // 지도를 클릭하면 클릭한 위치 좌표를 마커로 표시하고 주소를 인포윈도우에 띄우는 함수
+    kakao.maps.event.addListener(map, 'click', function (mouseEvent) {
+        searchDetailAddrFromCoords(mouseEvent.latLng, function (result, status) {
+            if (status === kakao.maps.services.Status.OK) {
+                var detailAddr = !!result[0].road_address ? '도로명 주소 : ' + result[0].road_address.address_name : '';
+                detailAddr += '<br>지번 주소 : ' + result[0].address.address_name;
+
+                var content = '<div class="bAddr">' + detailAddr + '</div>';
+
+                marker.setPosition(mouseEvent.latLng);
+                marker.setMap(map);
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
+            }
+        });
+    });
+
+    function searchDetailAddrFromCoords(coords, callback) {
+        geocoder.coord2Address(coords.getLng(), coords.getLat(), callback);
+    }
+</script>
+</body>
+</html>
