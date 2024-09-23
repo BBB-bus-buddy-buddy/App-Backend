@@ -1,6 +1,9 @@
 package capston2024.bustracker.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -8,7 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -20,8 +23,14 @@ public class KakaoApiService {
     @Value("${kakao-rest-api-key}")
     private String REST_API_KEY;
 
+    @Autowired
+    private ObjectMapper objectMapper;  // ObjectMapper 주입
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
     /**
      * 단일 경유지 API
+     *
      * @param origin
      * @param destination
      * @return
@@ -41,7 +50,6 @@ public class KakaoApiService {
         headers.add("Authorization", "KakaoAK " + REST_API_KEY);
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
-        RestTemplate restTemplate = new RestTemplate();
         ResponseEntity<Map> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,
@@ -59,7 +67,60 @@ public class KakaoApiService {
         return null; // 도착 시간이 없을 때 null 반환
     }
 
-    public Integer getMultiwayArrivalTime(){
-        return 0;
+    public String getMultiArrivalTime(Map<String, Object> request) throws JsonProcessingException {
+        // 설정된 헤더에 API 키 추가
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "KakaoAK " + REST_API_KEY);
+        headers.set("Content-Type", "application/json");
+
+        // 요청 본문
+        Map<String, Object> body = new HashMap<>();
+        body.put("origin", request.get("origin"));
+        body.put("destination", request.get("destination"));
+        body.put("waypoints", request.get("waypoints"));
+        body.put("priority", "RECOMMEND");
+        body.put("car_fuel", "GASOLINE");
+        body.put("car_hipass", false);
+        body.put("alternatives", false);
+        body.put("road_details", false);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+        // API 호출
+        ResponseEntity<String> response = restTemplate.exchange(
+                "https://apis-navi.kakaomobility.com/v1/waypoints/directions",
+                HttpMethod.POST,
+                entity,
+                String.class
+        );
+
+        String responseBody = response.getBody();
+
+        // 응답에서 경로 정보 추출 및 총 소요 시간 계산
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> resultMap = objectMapper.readValue(responseBody, Map.class);
+
+        int totalDuration = 0; // 총 소요 시간 (초 단위)
+
+        if (resultMap != null && resultMap.containsKey("routes")) {
+            List<Map<String, Object>> routes = (List<Map<String, Object>>) resultMap.get("routes");
+            if (!routes.isEmpty()) {
+                // 첫 번째 경로의 summary에서 소요 시간 추출
+                Map<String, Object> summary = (Map<String, Object>) routes.get(0).get("summary");
+                totalDuration = (Integer) summary.get("duration");
+            }
+        } else {
+            log.error("경로를 찾을 수 없습니다.");
+            return "경로를 찾을 수 없습니다.";
+        }
+
+        // 시, 분, 초 단위로 변환
+        int hours = totalDuration / 3600;
+        int minutes = (totalDuration % 3600) / 60;
+        int seconds = totalDuration % 60;
+
+        String formattedTime = String.format("%d시간 %d분 %d초", hours, minutes, seconds);
+        log.info("총 소요 시간: {}", formattedTime);
+        return formattedTime;
     }
 }
