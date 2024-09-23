@@ -76,6 +76,23 @@ public class BusService {
                 .timestamp(Instant.now())
                 .build();
     }
+
+    /** 버스의 좌석 수를 업데이트하는 메소드
+     * @param busId
+     * @param occupiedSeats
+     * @return
+     */
+    public boolean updateBusSeats(String busId, int occupiedSeats) {
+        Optional<Bus> busOptional = busRepository.findById(busId);
+
+        if (busOptional.isPresent()) {
+            Bus bus = busOptional.get();
+            bus.setOccupiedSeats(occupiedSeats);  // 버스의 앉은 좌석 수 업데이트
+            busRepository.save(bus);
+            return true;
+        }
+        return false;
+    }
 }
 
 
