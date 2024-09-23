@@ -53,5 +53,3 @@ jobs:
           version_label: github-action-${{steps.current-time.outputs.formattedTime}}
           region: ap-northeast-2
           deployment_package: ./build/libs/${{env.artifact}}
-        env:
-          SPRING_PROFILES_ACTIVE: prod
