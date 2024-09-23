@@ -6,7 +6,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import static com.mongodb.internal.connection.tlschannel.util.Util.assertTrue;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest
 @ActiveProfiles("test")
 class BustrackerApplicationTests {
 	@Test
