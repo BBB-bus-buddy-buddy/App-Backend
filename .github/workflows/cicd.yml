@@ -27,12 +27,12 @@ jobs:
             echo "SPRING_PROFILES_ACTIVE=dev" >> $GITHUB_ENV
           fi
 
-
       # 프로파일에 따른 빌드
       - name: Build with Gradle
-        run: ./gradlew clean build -Pspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }}
+        run: ./gradlew clean build -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }}
         env:
           UNIV_API_KEY: ${{ secrets.UNIV_API_KEY }}
+          kakao-rest-api-key: ${{ secrets.KAKAO_REST_API_KEY }}
 
       # release 브랜치일 때만 배포 단계 실행
       - name: Prepare for deploy
@@ -40,7 +40,6 @@ jobs:
         run: |
           echo "Preparing for deployment..."
           echo "artifact=$(ls ./build/libs)" >> $GITHUB_ENV
-          export SPRING_PROFILES_ACTIVE=prod
 
       - name: Get current time
         if: github.ref == 'refs/heads/release'
@@ -61,3 +60,5 @@ jobs:
           version_label: github-action-${{steps.current-time.outputs.formattedTime}}
           region: ap-northeast-2
           deployment_package: ./build/libs/${{env.artifact}}
+        env:
+          SPRING_PROFILES_ACTIVE: prod
