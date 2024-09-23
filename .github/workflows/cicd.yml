@@ -18,39 +18,32 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 환경에 따른 프로파일 설정
+      # 프로파일을 항상 prod로 설정
       - name: Set Spring Profiles Active
-        run: |
-          if [[ ${{ github.ref }} == 'refs/heads/release' ]]; then
-            echo "SPRING_PROFILES_ACTIVE=prod" >> $GITHUB_ENV
-          else
-            echo "SPRING_PROFILES_ACTIVE=dev" >> $GITHUB_ENV
-          fi
+        run: echo "SPRING_PROFILES_ACTIVE=prod" >> $GITHUB_ENV
 
-      # 프로파일에 따른 빌드
-      - name: Build with Gradle
-        run: ./gradlew clean build -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }}
+      # 빌드 및 테스트
+      - name: Build and Test with Gradle
+        run: ./gradlew clean build -Dspring.profiles.active=prod
         env:
           UNIV_API_KEY: ${{ secrets.UNIV_API_KEY }}
           kakao-rest-api-key: ${{ secrets.KAKAO_REST_API_KEY }}
 
-      # release 브랜치일 때만 배포 단계 실행
+      # 배포 준비
       - name: Prepare for deploy
-        if: github.ref == 'refs/heads/release'
         run: |
           echo "Preparing for deployment..."
           echo "artifact=$(ls ./build/libs)" >> $GITHUB_ENV
 
       - name: Get current time
-        if: github.ref == 'refs/heads/release'
         uses: josStorer/get-current-time@v2.0.2
         id: current-time
         with:
           format: YYYY-MM-DDTHH-mm-ss
           utcOffset: "+09:00"
 
+      # Elastic Beanstalk 배포
       - name: Beanstalk Deploy
-        if: github.ref == 'refs/heads/release'
         uses: einaregilsson/beanstalk-deploy@v20
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
