@@ -52,9 +52,9 @@ dependencies {
 	annotationProcessor "org.springframework.boot:spring-boot-configuration-processor"
 }
 
-configurations.configureEach {
-	exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
-}
+//configurations.configureEach {
+//	exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+//}
 tasks.named('test') {
 	useJUnitPlatform()
 }

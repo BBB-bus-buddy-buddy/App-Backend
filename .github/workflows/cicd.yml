@@ -1,16 +1,12 @@
-# 워크플로의 이름 지정
-name : CI/CD
+name: CI/CD
 
-# 워크 플로가 시작될 조건 지정
 on:
   push:
-    branches: [ release ]
+    branches: [ release, dev-kth, dev-ujs, main ]
 
 jobs:
   build:
-    # 실행환경 지정
     runs-on: ubuntu-latest
-    # 실행 스텝 지정
     steps:
       - uses: actions/checkout@v4
 
@@ -22,22 +18,36 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew clean build
+      # 환경에 따른 프로파일 설정
+      - name: Set Spring Profiles Active
+        run: |
+          if [[ ${{ github.ref }} == 'refs/heads/release' ]]; then
+            echo "SPRING_PROFILES_ACTIVE=prod" >> $GITHUB_ENV
+          else
+            echo "SPRING_PROFILES_ACTIVE=dev" >> $GITHUB_ENV
+          fi
 
-      - name : Get current time
+      # 프로파일에 따른 빌드
+      - name: Build with Gradle
+        run: ./gradlew clean build -Pspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }}
+
+      # release 브랜치일 때만 배포 단계 실행
+      - name: Prepare for deploy
+        if: github.ref == 'refs/heads/release'
+        run: |
+          echo "Preparing for deployment..."
+          echo "artifact=$(ls ./build/libs)" >> $GITHUB_ENV
+
+      - name: Get current time
+        if: github.ref == 'refs/heads/release'
         uses: josStorer/get-current-time@v2.0.2
-        id : current-time
+        id: current-time
         with:
           format: YYYY-MM-DDTHH-mm-ss
           utcOffset: "+09:00"
 
-      # 배포용 패키지 경로 저장
-      - name: Set artifact
-        run: echo "artifact=$(ls ./build/libs)" >> $GITHUB_ENV
-
-      # 빈스토크 배포
       - name: Beanstalk Deploy
+        if: github.ref == 'refs/heads/release'
         uses: einaregilsson/beanstalk-deploy@v20
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
