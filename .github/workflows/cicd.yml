@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [ release, dev-kth, dev-ujs, main ]
+    branches: [ release ]
 
 jobs:
   build:
