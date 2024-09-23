@@ -60,6 +60,7 @@ tasks.named('test') {
 }
 
 test {
+	systemProperty 'spring.profiles.active', 'test'
 	useJUnitPlatform()
 	testLogging {
 		events "passed", "skipped", "failed"
