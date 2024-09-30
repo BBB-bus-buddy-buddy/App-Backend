@@ -8,7 +8,9 @@ public enum ErrorCode {
     TOKEN_EXPIRED("Token has expired"),
     ACCESS_DENIED("Access denied"),
     USER_NOT_FOUND("User not found"),
-    GENERAL_ERROR("A general error occurred");
+    GENERAL_ERROR("A general error occurred"),
+    ENTITY_NOT_FOUND("Entity not found"),
+    DUPLICATE_ENTITY("Duplicate entity found");
 
     private final String message;
 
