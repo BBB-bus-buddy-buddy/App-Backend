@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -24,6 +25,8 @@ public class BusService {
     private final BusRepository busRepository;
     private final StationRepository stationRepository;
     private final KakaoApiService kakaoApiService;
+    private final List<BusRegisterRequestDTO> busList = new ArrayList<>();
+
 
     public String createBus(BusRegisterRequestDTO busRegisterRequestDTO) {
         // 중복된 버스 번호 검사
@@ -47,12 +50,42 @@ public class BusService {
         return busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.";
     }
 
-    public void editBus() {
-
+    // 2. 버스 삭제
+    public String removeBus(String busNumber) {
+        for (BusRegisterRequestDTO bus : busList) {
+            if (bus.getBusNumber().equals(busNumber)) {
+                busList.remove(bus);
+                return busNumber + "번 버스가 성공적으로 삭제되었습니다.";
+            }
+        }
+        return "버스를 찾을 수 없습니다.";
     }
 
-    public void removeBus() {
+    // 3. 버스 수정
+    public String modifyBus(BusRegisterRequestDTO busRegisterRequestDTO) {
+        for (BusRegisterRequestDTO bus : busList) {
+            if (bus.getBusNumber().equals(busRegisterRequestDTO.getBusNumber())) {
+                bus.setStationNames(busRegisterRequestDTO.getStationNames());
+                bus.setBusSeat(busRegisterRequestDTO.getBusSeat());
+                return busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.";
+            }
+        }
+        return "버스를 찾을 수 없습니다.";
+    }
 
+    // 4. 모든 버스 조회
+    public List<BusRegisterRequestDTO> getAllBuses() {
+        return busList;
+    }
+
+    // 특정 버스 조회
+    public BusRegisterRequestDTO getBusByNumber(String busNumber) {
+        for (BusRegisterRequestDTO bus : busList) {
+            if (bus.getBusNumber().equals(busNumber)) {
+                return bus;
+            }
+        }
+        return null;
     }
 
     @Async("taskExecutor")
@@ -93,6 +126,7 @@ public class BusService {
         }
         return false;
     }
+
 }
 
 
