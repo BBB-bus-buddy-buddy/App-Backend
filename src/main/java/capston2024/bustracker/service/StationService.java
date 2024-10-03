@@ -1,5 +1,6 @@
 package capston2024.bustracker.service;
 
+import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
@@ -9,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -68,5 +70,16 @@ public class StationService {
         log.info("ID {}로 정류장 삭제 중...", id);
         Station station = getStationById(id);  // 존재 여부 확인
         stationRepository.delete(station);
+    }
+
+    // 정류정 유효성 검사
+    protected boolean isValidStation(BusRegisterRequestDTO busRegisterRequestDTO) {
+        List<String> stationNames = busRegisterRequestDTO.getStationNames();
+        for (String stationName : stationNames) {
+            Optional<Station> station = stationRepository.findByName(stationName);
+            if (station.isEmpty())
+                return false;
+        }
+        return true;
     }
 }
