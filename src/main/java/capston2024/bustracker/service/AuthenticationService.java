@@ -1,6 +1,7 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.*;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.repository.UserRepository;
