@@ -1,7 +1,7 @@
 
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.domain.auth.User;
+import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.UserRepository;

@@ -1,9 +1,13 @@
-package capston2024.bustracker.domain.auth;
+package capston2024.bustracker.domain;
+
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.auth.BaseEntity;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.util.List;
 
 /**
  * 비지니스 도메인 객체, ex) 회원, 주문, 쿠폰 등등 주로 DB에 저장하고 관리되는 것들
@@ -26,6 +30,7 @@ public class User extends BaseEntity {
     private String picture;
     private Role role;
     private String organizationId; // 기관 인증 Id
+    private List<Station> myStations;
 
     public void updateRole(Role role){
         this.role = role;
