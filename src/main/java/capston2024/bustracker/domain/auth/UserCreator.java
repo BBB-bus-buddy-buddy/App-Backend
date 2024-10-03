@@ -1,6 +1,7 @@
 package capston2024.bustracker.domain.auth;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.User;
 
 /**
  *  처음 가입 시 엔티티 부여

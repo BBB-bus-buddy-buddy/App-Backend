@@ -2,10 +2,7 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.domain.auth.OAuthAttributes;
 import capston2024.bustracker.config.dto.GoogleInfoDTO;
-import capston2024.bustracker.domain.auth.User;
-import capston2024.bustracker.domain.auth.UserCreator;
-import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
-import capston2024.bustracker.repository.UserRepository;
+import capston2024.bustracker.domain.User;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
