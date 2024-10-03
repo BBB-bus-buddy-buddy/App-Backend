@@ -1,6 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
+import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.service.BusService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -50,15 +51,15 @@ public class BusController {
 
     // 4. 버스 조회 (GET)
     @GetMapping("/list")
-    public ResponseEntity<List<BusRegisterRequestDTO>> getAllBuses() {
-        List<BusRegisterRequestDTO> buses = busService.getAllBuses();
+    public ResponseEntity<List<Bus>> getAllBuses() {
+        List<Bus> buses = busService.getAllBuses();
         return ResponseEntity.ok(buses);
     }
 
     // 특정 버스 조회 (GET)
     @GetMapping("/get/{busNumber}")
-    public ResponseEntity<BusRegisterRequestDTO> getBusByNumber(@PathVariable String busNumber) {
-        BusRegisterRequestDTO bus = busService.getBusByNumber(busNumber);
+    public ResponseEntity<Bus> getBusByNumber(@PathVariable String busNumber) {
+        Bus bus = busService.getBusByNumber(busNumber);
         if (bus != null) {
             return ResponseEntity.ok(bus);
         } else {

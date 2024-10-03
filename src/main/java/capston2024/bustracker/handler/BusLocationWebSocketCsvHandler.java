@@ -27,14 +27,14 @@ public class BusLocationWebSocketCsvHandler extends TextWebSocketHandler {
     private final BusService busLocationService;
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+    public void handleTextMessage(WebSocketSession session, TextMessage message) {
         String csvData = message.getPayload();
         busLocationService.processBusLocationAsync(csvData)
                 .thenAccept(bus -> {
                     try {
                         session.sendMessage(new TextMessage("Location processed: " + bus.getId()));
                     } catch (IOException e) {
-                        handleException(session, "Error sending confirmation", e);
+                        log.error("Error sending confirmation", e);
                     }
                 })
                 .exceptionally(ex -> {
@@ -44,13 +44,11 @@ public class BusLocationWebSocketCsvHandler extends TextWebSocketHandler {
     }
 
     private void handleException(WebSocketSession session, String message, Throwable ex) {
+        log.error(message, ex);
         try {
             session.sendMessage(new TextMessage("Error: " + message));
         } catch (IOException e) {
-            // 로그에 에러 기록
-            ex.printStackTrace();
+            log.error("Failed to send error message to client", e);
         }
-        // 로그에 원래 예외 기록
-        ex.printStackTrace();
     }
 }
