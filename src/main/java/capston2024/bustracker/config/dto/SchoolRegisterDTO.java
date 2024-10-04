@@ -9,9 +9,7 @@ import lombok.Setter;
 @Getter @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class CreateDTO {
+public class SchoolRegisterDTO {
     @NotNull
     private String SchoolName;
-    private double latitude;  // 위도
-    private double longitude; // 경도
 }

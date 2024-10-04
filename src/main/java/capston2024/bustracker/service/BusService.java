@@ -1,8 +1,8 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
+import capston2024.bustracker.config.dto.BusDTO;
+import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.domain.Bus;
-import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.StationRepository;
@@ -13,9 +13,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -24,47 +22,38 @@ import java.util.concurrent.CompletableFuture;
 public class BusService {
 
     private final BusRepository busRepository;
-    private final StationRepository stationRepository;
     private final StationService stationService;
-    private final List<BusRegisterRequestDTO> busList = new ArrayList<>();
 
-
-    public String createBus(BusRegisterRequestDTO busRegisterRequestDTO) {
-
-        // 정류장이 모두 존재하는 정류장인지 확인 ( StationService 에서 해결 )
-        List<String> stationNames = busRegisterRequestDTO.getStationNames();
-        for (String stationName : stationNames) {
-            Optional<Station> station = stationRepository.findByName(stationName);
-            if (station.isEmpty()) {
-                return "정류장: " + stationName + "은(는) 없는 정류장입니다.";
-            }
+    public String createBus(BusRegisterDTO busRegisterDTO) {
+        if(stationService.isValidStation(busRegisterDTO)){
+            Bus bus = Bus.builder()
+                    .busNumber(busRegisterDTO.getBusNumber())
+                    .stationsNames(busRegisterDTO.getStationNames())
+                    .totalSeats(busRegisterDTO.getTotalSeats())
+                    .build();
+            busRepository.save(bus);
+            return busRegisterDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.";
         }
-        Bus bus = Bus.builder()
-                .busNumber(busRegisterRequestDTO.getBusNumber())
-                .stationsNames(busRegisterRequestDTO.getStationNames())
-                .build();
-        busRepository.save(bus);
-        return busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.";
+        return "버스를 생성하는 데 실패하였습니다";
     }
 
     // 2. 버스 삭제
     public String removeBus(String busNumber) {
         if(busRepository.existsBusByBusNumber(busNumber)){
             busRepository.delete(busRepository.findBusByBusNumber(busNumber).orElseThrow(()-> new BusinessException("버스를 찾을 수 없습니다.")));
-            return "성공적으로 버스를 삭제하였습니다.";
+            return busNumber + "번 버스가 성공적으로 삭제되었습니다.";
         }
         return "버스를 찾을 수 없습니다.";
     }
 
-    // 3. 버스 수정 - 정류장의 변동 사항이 생길 때만
-    public String modifyBus(BusRegisterRequestDTO busRegisterRequestDTO) {
-        for (BusRegisterRequestDTO bus : busList) {
-            if (bus.getBusNumber().equals(busRegisterRequestDTO.getBusNumber())) {
-                bus.setStationNames(busRegisterRequestDTO.getStationNames());
-                return busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.";
-            }
-        }
-        return "버스를 찾을 수 없습니다.";
+    // 3. 버스 수정 - 전체 버스 수정 사항
+    // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
+    public String modifyBus(BusDTO busDTO) {
+            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new BusinessException("버스를 찾을 수 없습니다."));
+            bus.setStationsNames(busDTO.getStationsNames());
+            bus.setBusNumber(bus.getBusNumber());
+            bus.setTotalSeats(bus.getTotalSeats());
+            return busDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.";
     }
 
     // 4. 모든 버스 조회
@@ -79,6 +68,11 @@ public class BusService {
                 : null;
     }
 
+    /**
+     * 웹 소켓에서 받아오는 서비스 - 버스 위치 정보, 버스 좌석 정보
+     * @param csvData ( busNumber, location(lat, lst) )
+     * @return CompletableFuture.xFuture(e)
+     */
     @Async("taskExecutor")
     public CompletableFuture<Bus> processBusLocationAsync(String csvData) {
         try {

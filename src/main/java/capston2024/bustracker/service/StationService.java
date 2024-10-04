@@ -1,6 +1,6 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
+import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
@@ -73,8 +73,8 @@ public class StationService {
     }
 
     // 정류정 유효성 검사
-    protected boolean isValidStation(BusRegisterRequestDTO busRegisterRequestDTO) {
-        List<String> stationNames = busRegisterRequestDTO.getStationNames();
+    protected boolean isValidStation(BusRegisterDTO busRegisterDTO) {
+        List<String> stationNames = busRegisterDTO.getStationNames();
         for (String stationName : stationNames) {
             Optional<Station> station = stationRepository.findByName(stationName);
             if (station.isEmpty())
