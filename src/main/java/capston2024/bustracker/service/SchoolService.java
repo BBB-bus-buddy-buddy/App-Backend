@@ -3,6 +3,7 @@ package capston2024.bustracker.service;
 import capston2024.bustracker.config.ApiKeyConfig;
 import capston2024.bustracker.domain.School;
 import capston2024.bustracker.domain.auth.SchoolIdGenerator;
+import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.DuplicateResourceException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.SchoolRepository;
@@ -59,7 +60,7 @@ public class SchoolService {
         try {
             UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code);
         } catch (IOException e){
-            return false;
+            throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
         return true;
     }
@@ -68,7 +69,7 @@ public class SchoolService {
         try {
             UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true);
         } catch (IOException e){
-            return false;
+            throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
         return true;
     }
@@ -77,7 +78,7 @@ public class SchoolService {
         try {
             UnivCert.check(schoolName);
         } catch (IOException e){
-            return false;
+            throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
         return true;
     }
