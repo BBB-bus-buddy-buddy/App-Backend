@@ -2,9 +2,9 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.SchoolRegisterDTO;
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.service.AdminService;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.service.SchoolService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,16 +23,16 @@ import java.util.List;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @Validated
-public class AdminController {
+public class SchoolController {
 
-    private final AdminService adminService;
-    
+    private final SchoolService schoolService;
+
     @PostMapping("/school")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> createSchool(@Valid @RequestBody SchoolRegisterDTO request,
                                                              @AuthenticationPrincipal OAuth2User principal) {
         log.info("Creating school: {}", request.getSchoolName());
-        boolean created = adminService.createSchool(request.getSchoolName(), principal);
+        boolean created = schoolService.createSchool(request.getSchoolName(), principal);
         return ResponseEntity.ok(new ApiResponse<>(created, "School created successfully"));
     }
 
@@ -40,7 +40,7 @@ public class AdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<String>>> getAllSchools() {
         log.info("Retrieving all schools");
-        List<String> schools = adminService.getAllSchools();
+        List<String> schools = schoolService.getAllSchools();
         return ResponseEntity.ok(new ApiResponse<>(schools, "Schools retrieved successfully"));
     }
 
@@ -49,7 +49,7 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Boolean>> deleteSchool(@PathVariable String schoolName,
                                                              @AuthenticationPrincipal OAuth2User principal) {
         log.info("Deleting school: {}", schoolName);
-        boolean deleted = adminService.deleteSchool(schoolName, principal);
+        boolean deleted = schoolService.deleteSchool(schoolName, principal);
         return ResponseEntity.ok(new ApiResponse<>(deleted, "School deleted successfully"));
     }
 

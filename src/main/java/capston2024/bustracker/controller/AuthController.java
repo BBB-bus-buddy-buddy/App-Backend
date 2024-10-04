@@ -2,7 +2,7 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.SchoolAuthRequestDTO;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
-import capston2024.bustracker.service.AuthenticationService;
+import capston2024.bustracker.service.AuthService;
 import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,7 +22,7 @@ import java.util.Map;
 public class AuthController {
 
     @Autowired
-    private AuthenticationService authenticationService;
+    private AuthService authService;
 
     @GetMapping("/login")
     public void login(HttpServletResponse response) throws IOException, java.io.IOException {
@@ -31,24 +31,24 @@ public class AuthController {
 
     @GetMapping("/user")
     public ResponseEntity<?> getUser(@AuthenticationPrincipal OAuth2User principal) {
-        return ResponseEntity.ok(authenticationService.getUserDetails(principal));
+        return ResponseEntity.ok(authService.getUserDetails(principal));
     }
 
     @PostMapping("/school/mail")
     public ResponseEntity<?> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
-        boolean isSendMail = authenticationService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
+        boolean isSendMail = authService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
         return ResponseEntity.ok(Map.of("sendMail", isSendMail));
     }
 
     @PostMapping("/school/code")
     public ResponseEntity<?> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException, java.io.IOException {
-        boolean isAuthenticated = authenticationService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
+        boolean isAuthenticated = authService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
         return ResponseEntity.ok(Map.of("authenticated", isAuthenticated));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        authenticationService.logout(request, response);
+        authService.logout(request, response);
         return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 }

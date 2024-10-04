@@ -7,7 +7,7 @@ import java.util.List;
 
 @Getter
 @Setter
-public class BusRegisterRequestDTO {
+public class BusRegisterDTO {
     private String busNumber;         // 버스 번호
     private List<String> stationNames; // 버스 노선에 포함될 정류장 이름 리스트
     private int totalSeats;

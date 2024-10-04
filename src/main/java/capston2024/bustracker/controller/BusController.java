@@ -1,10 +1,12 @@
 package capston2024.bustracker.controller;
 
-import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
+import capston2024.bustracker.config.dto.BusDTO;
+import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.service.BusService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,10 +19,11 @@ public class BusController {
     private final BusService busService;
 
     // 1. 버스 추가 (POST)
-    @PostMapping("/create")
-    public ResponseEntity<String> createBus(@RequestBody BusRegisterRequestDTO busRegisterRequestDTO) {
-        String result = busService.createBus(busRegisterRequestDTO);
-        if(result.equals(busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.")) {
+    @PostMapping("/")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> createBus(@RequestBody BusRegisterDTO busRegisterDTO) {
+        String result = busService.createBus(busRegisterDTO);
+        if(result.equals(busRegisterDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.")) {
             return ResponseEntity.ok(result);
         } else {
             return ResponseEntity.badRequest().body(result);
@@ -28,7 +31,8 @@ public class BusController {
     }
 
     // 2. 버스 삭제 (DELETE)
-    @DeleteMapping("/delete/{busNumber}")
+    @DeleteMapping("/{busNumber}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> deleteBus(@PathVariable String busNumber) {
         String result = busService.removeBus(busNumber);
         if(result.equals(busNumber + "번 버스가 성공적으로 삭제되었습니다.")) {
@@ -39,10 +43,11 @@ public class BusController {
     }
 
     // 3. 버스 수정 (PUT)
-    @PutMapping("/update")
-    public ResponseEntity<String> updateBus(@RequestBody BusRegisterRequestDTO busRegisterRequestDTO) {
-        String result = busService.modifyBus(busRegisterRequestDTO);
-        if(result.equals(busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.")) {
+    @PutMapping("/")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> updateBus(@RequestBody BusDTO busDTO) {
+        String result = busService.modifyBus(busDTO);
+        if(result.equals(busDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.")) {
             return ResponseEntity.ok(result);
         } else {
             return ResponseEntity.badRequest().body(result);
@@ -50,14 +55,14 @@ public class BusController {
     }
 
     // 4. 버스 조회 (GET)
-    @GetMapping("/list")
+    @GetMapping("/")
     public ResponseEntity<List<Bus>> getAllBuses() {
         List<Bus> buses = busService.getAllBuses();
         return ResponseEntity.ok(buses);
     }
 
     // 특정 버스 조회 (GET)
-    @GetMapping("/get/{busNumber}")
+    @GetMapping("/{busNumber}")
     public ResponseEntity<Bus> getBusByNumber(@PathVariable String busNumber) {
         Bus bus = busService.getBusByNumber(busNumber);
         if (bus != null) {
