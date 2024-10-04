@@ -2,8 +2,11 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.BusDTO;
 import capston2024.bustracker.config.dto.BusRegisterDTO;
+import capston2024.bustracker.config.dto.BusSeatDTO;
+import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.exception.BusinessException;
+import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.AllArgsConstructor;
@@ -24,7 +27,7 @@ public class BusService {
     private final BusRepository busRepository;
     private final StationService stationService;
 
-    public String createBus(BusRegisterDTO busRegisterDTO) {
+    public boolean createBus(BusRegisterDTO busRegisterDTO) {
         if(stationService.isValidStation(busRegisterDTO)){
             Bus bus = Bus.builder()
                     .busNumber(busRegisterDTO.getBusNumber())
@@ -32,28 +35,25 @@ public class BusService {
                     .totalSeats(busRegisterDTO.getTotalSeats())
                     .build();
             busRepository.save(bus);
-            return busRegisterDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.";
+            return true;
         }
-        return "버스를 생성하는 데 실패하였습니다";
+        return false;
     }
 
     // 2. 버스 삭제
-    public String removeBus(String busNumber) {
-        if(busRepository.existsBusByBusNumber(busNumber)){
-            busRepository.delete(busRepository.findBusByBusNumber(busNumber).orElseThrow(()-> new BusinessException("버스를 찾을 수 없습니다.")));
-            return busNumber + "번 버스가 성공적으로 삭제되었습니다.";
-        }
-        return "버스를 찾을 수 없습니다.";
+    public boolean removeBus(String busNumber) {
+        busRepository.delete(busRepository.findBusByBusNumber(busNumber).orElseThrow(()-> new ResourceNotFoundException("버스를 찾을 수 없습니다.")));
+        return true;
     }
 
     // 3. 버스 수정 - 전체 버스 수정 사항
     // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
-    public String modifyBus(BusDTO busDTO) {
-            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new BusinessException("버스를 찾을 수 없습니다."));
+    public boolean modifyBus(BusDTO busDTO) {
+            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
             bus.setStationsNames(busDTO.getStationsNames());
             bus.setBusNumber(bus.getBusNumber());
             bus.setTotalSeats(bus.getTotalSeats());
-            return busDTO.getBusNumber() + "번 버스가 성공적으로 수정되었습니다.";
+            return true;
     }
 
     // 4. 모든 버스 조회
@@ -63,9 +63,7 @@ public class BusService {
 
     // 특정 버스 조회
     public Bus getBusByNumber(String busNumber) {
-        return busRepository.existsBusByBusNumber(busNumber)
-                ? busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new BusinessException("버스를 찾을 수 없습니다."))
-                : null;
+        return busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
     }
 
     /**
@@ -95,7 +93,7 @@ public class BusService {
     private Bus parseCsvToBusSeatsInfo(String csvData) {
         String[] parts = csvData.split(",");
         if (parts.length < 2) {
-            throw new IllegalArgumentException("Invalid CSV format");
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
         }
         Bus bus = getBusByNumber(parts[0]); //버스 번호 String
         bus.setOccupiedSeats(Integer.parseInt(parts[1])); // 버스 현재 차지된 좌석
@@ -107,13 +105,30 @@ public class BusService {
     private Bus parseCsvToBus(String csvData) {
         String[] parts = csvData.split(",");
         if (parts.length < 2) {
-            throw new IllegalArgumentException("Invalid CSV format");
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
         }
-        if(getBusByNumber(parts[0]) == null) throw new BusinessException("존재하지 않는 버스 번호 입니다.");
         Bus bus = getBusByNumber(parts[0]);
         bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
         bus.setTimestamp(Instant.now());
         return bus;
+    }
+
+    public BusSeatDTO getBusSeatsByBusNumber(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+        BusSeatDTO busSeatDTO = new BusSeatDTO();
+        busSeatDTO.setAvailableSeats(bus.getAvailableSeats());
+        busSeatDTO.setOccupiedSeats(bus.getOccupiedSeats());
+        busSeatDTO.setTotalSeats(bus.getTotalSeats());
+        return busSeatDTO;
+    }
+
+    public LocationDTO getBusLocationByBusNumber(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+        LocationDTO locationDTO = new LocationDTO();
+        locationDTO.setLatitude(bus.getLocation().getX());
+        locationDTO.setLongitude(bus.getLocation().getY());
+        locationDTO.setTimestamp(Instant.now());
+        return locationDTO;
     }
 }
 
