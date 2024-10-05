@@ -21,10 +21,11 @@ public class UserService {
     private final UserRepository userRepository;
     private final StationRepository stationRepository;
 
-    // 내 정류장 조회
+    // 내 정류장 조회 -> 여기서는 MyStationRequestDTO가 사용되지 않습니다(userId만 필요)
     public List<Station> getMyStationList(String userId) {
         log.warn("ID {} 사용자의 내 정류장 목록 조회를 시작합니다.", userId);
         // 사용자 조회
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         // 사용자의 내 정류장 목록 반환
