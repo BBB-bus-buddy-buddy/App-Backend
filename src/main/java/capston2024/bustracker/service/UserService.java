@@ -11,6 +11,8 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 @Slf4j
 @AllArgsConstructor
@@ -19,6 +21,15 @@ public class UserService {
     private final UserRepository userRepository;
     private final StationRepository stationRepository;
 
+    // 내 정류장 조회
+    public List<Station> getMyStationList(String userId) {
+        log.warn("ID {} 사용자의 내 정류장 목록 조회를 시작합니다.", userId);
+        // 사용자 조회
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 사용자의 내 정류장 목록 반환
+        return user.getMyStations();
+    }
 
     // 내 정류장 추가
     public boolean addMyStation(String userId, String stationId) {
@@ -58,6 +69,7 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
+
     // 정류장 탐색 + 예외처리
     private Station findByStationWithException(String stationId) {
         return stationRepository.findById(stationId)
