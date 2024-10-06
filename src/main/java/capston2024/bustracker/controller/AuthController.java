@@ -8,6 +8,7 @@ import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -24,10 +25,21 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
+    @Value("${OAUTH_CLIENT_ID}")
+    String clientId;
 
     @GetMapping("/login")
-    public void login(HttpServletResponse response) throws IOException, java.io.IOException {
-        response.sendRedirect("/oauth2/authorization/google");
+    public ResponseEntity<String> getGoogleAuthorizationUrl() {
+        String authorizationUri = "https://accounts.google.com/o/oauth2/v2/auth";
+        String redirectUri = "http://localhost:3000/oauth2/redirect";
+        String scope = "email profile";
+
+        String authorizationUrl = authorizationUri + "?client_id=" + clientId
+                + "&redirect_uri=" + redirectUri
+                + "&response_type=code"
+                + "&scope=" + scope;
+
+        return ResponseEntity.ok(authorizationUrl);
     }
 
     @GetMapping("/user")
