@@ -1,9 +1,7 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.ApiKeyConfig;
 import capston2024.bustracker.domain.School;
 import capston2024.bustracker.domain.auth.SchoolIdGenerator;
-import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.DuplicateResourceException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -11,8 +9,7 @@ import capston2024.bustracker.repository.SchoolRepository;
 import com.univcert.api.UnivCert;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +22,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class SchoolService {
-    private static final String UNIV_API_KEY = ApiKeyConfig.getUnivApiKey();
+    @Value("${UNIV_API_KEY}")
+    private static String UNIV_API_KEY;
 
     private final SchoolRepository schoolRepository;
 
