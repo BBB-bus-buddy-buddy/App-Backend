@@ -20,12 +20,15 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class SchoolService {
-    @Value("${UNIV_API_KEY}")
-    private static String UNIV_API_KEY;
 
+    private final String univApiKey;
     private final SchoolRepository schoolRepository;
+
+    public SchoolService(@Value("${UNIV_API_KEY}") String univApiKey, SchoolRepository schoolRepository) {
+        this.univApiKey = univApiKey;
+        this.schoolRepository = schoolRepository;
+    }
 
     @Transactional
     public boolean createSchool(String schoolName) {
@@ -63,7 +66,7 @@ public class SchoolService {
 
     public Map<String, Object> authenticate(String schoolEmail, String schoolName, int code) {
         try {
-            return UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code);
+            return UnivCert.certifyCode(univApiKey, schoolEmail, schoolName, code);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
@@ -71,7 +74,7 @@ public class SchoolService {
 
     public Map<String, Object> sendToEmail(String schoolEmail, String schoolName) {
         try {
-            return UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true);
+            return UnivCert.certify(univApiKey, schoolEmail, schoolName, true);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
