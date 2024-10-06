@@ -6,6 +6,7 @@ import capston2024.bustracker.domain.auth.SchoolIdGenerator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.DuplicateResourceException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.repository.SchoolRepository;
 import com.univcert.api.UnivCert;
 import lombok.RequiredArgsConstructor;
@@ -56,30 +57,30 @@ public class SchoolService {
         return true;
     }
 
+
+
     public boolean authenticate(String schoolEmail, String schoolName, int code) {
         try {
-            UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code);
+            return UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code).get("success").equals(true);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
-        return true;
     }
 
     public boolean sendToEmail(String schoolEmail, String schoolName) {
         try {
-            UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true);
+            return UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true).get("success").equals(true);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
-        return true;
     }
 
     public boolean checkBySchoolName(String schoolName){
         try {
-            UnivCert.check(schoolName);
+            School school = schoolRepository.findByName(schoolName).orElseThrow(()-> new ResourceNotFoundException("해당 학교는 등록되지 않았습니다."));
+            return UnivCert.check(school.getName()).get("success").equals(true);
         } catch (IOException e){
-            throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
+            throw new UnauthorizedException("학교를 찾을 수 없거나 인증할 수 없는 학교입니다.");
         }
-        return true;
     }
 }
