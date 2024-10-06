@@ -1,10 +1,13 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.School;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.*;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
+import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
+import capston2024.bustracker.repository.SchoolRepository;
 import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -45,8 +48,9 @@ public class AuthService {
         if (user == null) {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
+        School school = schoolService.getSchool(schoolName);
         user.updateRole(Role.USER);
-        user.setOrganizationId(SchoolIdGenerator.generateSchoolId(schoolName));
+        user.setOrganizationId(school.getId());
         userRepository.save(user);
         return true;
     }
