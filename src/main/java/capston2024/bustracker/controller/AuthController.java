@@ -29,9 +29,8 @@ public class AuthController {
     String clientId;
 
     @GetMapping("/login")
-    public ResponseEntity<String> getGoogleAuthorizationUrl() {
+    public ResponseEntity<String> getGoogleAuthorizationUrl(@RequestParam String redirectUri) {
         String authorizationUri = "https://accounts.google.com/o/oauth2/v2/auth";
-        String redirectUri = "http://localhost:3000/oauth2/redirect";
         String scope = "email profile";
 
         String authorizationUrl = authorizationUri + "?client_id=" + clientId
