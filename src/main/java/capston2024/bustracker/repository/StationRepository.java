@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface StationRepository extends MongoRepository<Station, String> {
-    // 특정 정류장을 정류장 이름으로 조회(정류장 이름은 중복 X <- DB에서 + 백에서 한번 더 검사)
+    // 특정 정류장을 정류장 이름으로 조회
     Optional<Station> findByName(String name);
 
+    // 특정 이름이 포함된 정류장 조회
     List<Station> findByNameContaining(String name);
-
 }

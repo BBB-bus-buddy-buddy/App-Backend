@@ -1,8 +1,9 @@
 package capston2024.bustracker.controller;
 
+import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.SchoolAuthRequestDTO;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
-import capston2024.bustracker.service.AuthenticationService;
+import capston2024.bustracker.service.AuthService;
 import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,7 +23,7 @@ import java.util.Map;
 public class AuthController {
 
     @Autowired
-    private AuthenticationService authenticationService;
+    private AuthService authService;
 
     @GetMapping("/login")
     public void login(HttpServletResponse response) throws IOException, java.io.IOException {
@@ -30,25 +31,26 @@ public class AuthController {
     }
 
     @GetMapping("/user")
-    public ResponseEntity<?> getUser(@AuthenticationPrincipal OAuth2User principal) {
-        return ResponseEntity.ok(authenticationService.getUserDetails(principal));
+    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
+        Map<String, Object> obj = authService.getUserDetails(principal);
+        return ResponseEntity.ok(new ApiResponse<>(obj, "성공적으로 유저의 정보를 조회하였습니다."));
     }
 
     @PostMapping("/school/mail")
-    public ResponseEntity<?> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
-        boolean isSendMail = authenticationService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
-        return ResponseEntity.ok(Map.of("sendMail", isSendMail));
+    public ResponseEntity<ApiResponse<Boolean>> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
+        boolean isSendMail = authService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
+        return ResponseEntity.ok(new ApiResponse<>(isSendMail, "성공적으로 메일 발송에 성공했습니다."));
     }
 
     @PostMapping("/school/code")
-    public ResponseEntity<?> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException, java.io.IOException {
-        boolean isAuthenticated = authenticationService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
-        return ResponseEntity.ok(Map.of("authenticated", isAuthenticated));
+    public ResponseEntity<ApiResponse<Boolean>> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException, java.io.IOException {
+        boolean isAuthenticated = authService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
+        return ResponseEntity.ok(new ApiResponse<>(isAuthenticated, "성공적으로 학교 코드를 인증하였습니다."));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        authenticationService.logout(request, response);
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
+    public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
+        authService.logout(request, response);
+        return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
     }
 }

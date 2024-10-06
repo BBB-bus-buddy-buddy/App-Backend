@@ -1,8 +1,12 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusRegisterRequestDTO;
+import capston2024.bustracker.config.dto.BusDTO;
+import capston2024.bustracker.config.dto.BusRegisterDTO;
+import capston2024.bustracker.config.dto.BusSeatDTO;
+import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
-import capston2024.bustracker.domain.Station;
+import capston2024.bustracker.exception.BusinessException;
+import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.AllArgsConstructor;
@@ -13,7 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -22,76 +25,110 @@ import java.util.concurrent.CompletableFuture;
 public class BusService {
 
     private final BusRepository busRepository;
-    private final StationRepository stationRepository;
-    private final KakaoApiService kakaoApiService;
+    private final StationService stationService;
 
-    public String createBus(BusRegisterRequestDTO busRegisterRequestDTO) {
-        // 중복된 버스 번호 검사
-        if (busRepository.existsBusByBusNumber(busRegisterRequestDTO.getBusNumber())) {
-            return "이미 있는 버스 번호입니다.";
+    public boolean createBus(BusRegisterDTO busRegisterDTO) {
+        if(stationService.isValidStation(busRegisterDTO)){
+            Bus bus = Bus.builder()
+                    .busNumber(busRegisterDTO.getBusNumber())
+                    .stationsNames(busRegisterDTO.getStationNames())
+                    .totalSeats(busRegisterDTO.getTotalSeats())
+                    .build();
+            busRepository.save(bus);
+            return true;
         }
-
-        // 정류장이 모두 존재하는 정류장인지 확인(작업중)
-        List<String> stationNames = busRegisterRequestDTO.getStationNames();
-        for (String stationName : stationNames) {
-            Optional<Station> station = stationRepository.findByName(stationName);
-            if (station.isEmpty()) {
-                return "정류장: " + stationName + "은(는) 없는 정류장입니다.";
-            }
-        }
-
-        Bus bus = new Bus();
-        bus.setBusNumber(busRegisterRequestDTO.getBusNumber());
-        bus.setStationsNames(busRegisterRequestDTO.getStationNames());
-        busRepository.save(bus);
-        return busRegisterRequestDTO.getBusNumber() + "번 버스가 성공적으로 등록되었습니다.";
+        return false;
     }
 
-    public void editBus() {
-
+    // 2. 버스 삭제
+    public boolean removeBus(String busNumber) {
+        busRepository.delete(busRepository.findBusByBusNumber(busNumber).orElseThrow(()-> new ResourceNotFoundException("버스를 찾을 수 없습니다.")));
+        return true;
     }
 
-    public void removeBus() {
-
+    // 3. 버스 수정 - 전체 버스 수정 사항
+    // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
+    public boolean modifyBus(BusDTO busDTO) {
+            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+            bus.setStationsNames(busDTO.getStationsNames());
+            bus.setBusNumber(bus.getBusNumber());
+            bus.setTotalSeats(bus.getTotalSeats());
+            return true;
     }
 
+    // 4. 모든 버스 조회
+    public List<Bus> getAllBuses() {
+        return busRepository.findAll();
+    }
+
+    // 특정 버스 조회
+    public Bus getBusByNumber(String busNumber) {
+        return busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+    }
+
+    /**
+     * 웹 소켓에서 받아오는 서비스 - 버스 위치 정보, 버스 좌석 정보
+     * @param csvData ( busNumber, location(lat, lst) )
+     * @return CompletableFuture.xFuture(e)
+     */
     @Async("taskExecutor")
     public CompletableFuture<Bus> processBusLocationAsync(String csvData) {
         try {
             Bus bus = parseCsvToBus(csvData);
-            Bus savedBus = busRepository.save(bus);
-            return CompletableFuture.completedFuture(savedBus);
+            return CompletableFuture.completedFuture(bus);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
     }
 
+    @Async("taskExecutor")
+    public CompletableFuture<Bus> processBusSeatAsync(String csvData) {
+        try {
+            Bus bus = parseCsvToBusSeatsInfo(csvData);
+            return CompletableFuture.completedFuture(bus);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+    private Bus parseCsvToBusSeatsInfo(String csvData) {
+        String[] parts = csvData.split(",");
+        if (parts.length < 2) {
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
+        }
+        Bus bus = getBusByNumber(parts[0]); //버스 번호 String
+        bus.setOccupiedSeats(Integer.parseInt(parts[1])); // 버스 현재 차지된 좌석
+        bus.setAvailableSeats(bus.getTotalSeats()-bus.getOccupiedSeats());
+        return bus;
+    }
+
+    //파싱된 버스 위치정보는 무조건 modify 여야한다.
     private Bus parseCsvToBus(String csvData) {
         String[] parts = csvData.split(",");
         if (parts.length < 2) {
-            throw new IllegalArgumentException("Invalid CSV format");
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
         }
-        return Bus.builder()
-                .location(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[0])))
-                .timestamp(Instant.now())
-                .build();
+        Bus bus = getBusByNumber(parts[0]);
+        bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
+        bus.setTimestamp(Instant.now());
+        return bus;
     }
 
-    /** 버스의 좌석 수를 업데이트하는 메소드
-     * @param busId
-     * @param occupiedSeats
-     * @return
-     */
-    public boolean updateBusSeats(String busId, int occupiedSeats) {
-        Optional<Bus> busOptional = busRepository.findById(busId);
+    public BusSeatDTO getBusSeatsByBusNumber(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+        BusSeatDTO busSeatDTO = new BusSeatDTO();
+        busSeatDTO.setAvailableSeats(bus.getAvailableSeats());
+        busSeatDTO.setOccupiedSeats(bus.getOccupiedSeats());
+        busSeatDTO.setTotalSeats(bus.getTotalSeats());
+        return busSeatDTO;
+    }
 
-        if (busOptional.isPresent()) {
-            Bus bus = busOptional.get();
-            bus.setOccupiedSeats(occupiedSeats);  // 버스의 앉은 좌석 수 업데이트
-            busRepository.save(bus);
-            return true;
-        }
-        return false;
+    public LocationDTO getBusLocationByBusNumber(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+        LocationDTO locationDTO = new LocationDTO();
+        locationDTO.setLatitude(bus.getLocation().getX());
+        locationDTO.setLongitude(bus.getLocation().getY());
+        locationDTO.setTimestamp(Instant.now());
+        return locationDTO;
     }
 }
 

@@ -1,8 +1,10 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.*;
 import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
+import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,21 +21,25 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class AuthenticationService {
+public class AuthService {
     private final UserRepository userRepository;
-    private final AdditionalAuthAPI additionalAuthApi;
+    private final SchoolService schoolService;
 
+    // 이메일 검증 -> 이메일을 찾을 수 없을 시 새로운 유저 생성 로직으로 넘어감
     @Transactional
     public User authenticateUser(OAuthAttributes attributes) {
         return userRepository.findByEmail(attributes.getEmail())
                 .orElseGet(() -> createNewUser(attributes));
     }
 
+    // 새로운 유저 생성
     private User createNewUser(OAuthAttributes attributes) {
         User newUser = UserCreator.createUserFrom(attributes);
         return userRepository.save(newUser);
     }
 
+
+    // 학교 인증후 인증 완료 시 유저의 역할이 USER 로 변경됨
     @Transactional
     public boolean performSchoolAuthentication(OAuth2User principal, String studentEmail, String schoolName, int code) throws AdditionalAuthenticationFailedException, IOException {
         User user = getUserFromPrincipal(principal);
@@ -41,7 +47,7 @@ public class AuthenticationService {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
 
-        boolean isAuthenticated = additionalAuthApi.authenticate(studentEmail, schoolName, code);
+        boolean isAuthenticated = schoolService.authenticate(studentEmail, schoolName, code);
         if (isAuthenticated) {
             user.updateRole(Role.USER);
             user.setOrganizationId(SchoolIdGenerator.generateSchoolId(schoolName));
@@ -52,6 +58,7 @@ public class AuthenticationService {
         }
     }
 
+    // 학교 이메일 보내기
     @Transactional
     public boolean sendToSchoolEmail(OAuth2User principal, String schoolEmail, String schoolName) {
         User user = getUserFromPrincipal(principal);
@@ -59,9 +66,10 @@ public class AuthenticationService {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
 
-        return additionalAuthApi.sendToEmail(schoolEmail, schoolName);
+        return schoolService.sendToEmail(schoolEmail, schoolName);
     }
 
+    //로그아웃
     public void logout(HttpServletRequest request, HttpServletResponse response) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null) {
@@ -69,11 +77,46 @@ public class AuthenticationService {
         }
     }
 
+    /**
+     * 유저 정보 반환
+     * @param principal
+     * @return User Class
+     */
     private User getUserFromPrincipal(OAuth2User principal) {
         String email = (String) principal.getAttributes().get("email");
         return userRepository.findByEmail(email).orElse(null);
     }
 
+    /**
+     * 관리자 검증 로직
+     * @param principal
+     */
+    void validateAdmin(OAuth2User principal) {
+        if (!isAdmin(principal)) {
+            throw new UnauthorizedException("해당 유저에게 권한이 없습니다.");
+        }
+    }
+
+    /**
+     * 관리자 검증 로직
+     * @param principal
+     * @return
+     */
+    private boolean isAdmin(OAuth2User principal) {
+        Map<String,Object> obj = getUserDetails(principal);
+        return obj.get("role").equals("ADMIN");
+    }
+
+
+    /**
+     * 유저 정보를 Map<키, 값> 형태로 반환
+     * @param principal OAuth2User
+     * @return Map(String, Object)
+     * 인증상태, bool
+     * name, string
+     * email, string
+     * role string
+     */
     public Map<String, Object> getUserDetails(OAuth2User principal) {
         User user = getUserFromPrincipal(principal);
         if (user == null) {

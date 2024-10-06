@@ -1,6 +1,6 @@
 package capston2024.bustracker.config.dto;
 
-import capston2024.bustracker.domain.auth.User;
+import capston2024.bustracker.domain.User;
 import lombok.Getter;
 
 /**

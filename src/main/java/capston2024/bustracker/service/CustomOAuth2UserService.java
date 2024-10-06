@@ -2,10 +2,7 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.domain.auth.OAuthAttributes;
 import capston2024.bustracker.config.dto.GoogleInfoDTO;
-import capston2024.bustracker.domain.auth.User;
-import capston2024.bustracker.domain.auth.UserCreator;
-import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
-import capston2024.bustracker.repository.UserRepository;
+import capston2024.bustracker.domain.User;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
@@ -28,7 +25,7 @@ import java.util.Collections;
 @Service
 public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
     private final HttpSession httpSession;
-    private final AuthenticationService authenticationService;
+    private final AuthService authService;
 
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
@@ -42,7 +39,7 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
 
         OAuthAttributes attributes = OAuthAttributes.of(registrationId, userNameAttributeName, oAuth2User.getAttributes());
 
-        User user = authenticationService.authenticateUser(attributes);
+        User user = authService.authenticateUser(attributes);
 
         httpSession.setAttribute("user", new GoogleInfoDTO(user));
 
