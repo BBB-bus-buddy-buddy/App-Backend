@@ -48,6 +48,10 @@ public class SchoolService {
         return schools.stream().map(School::getName).collect(Collectors.toList());
     }
 
+    public School getSchool(String schoolName){
+        return schoolRepository.findByName(schoolName).orElseThrow(()->new ResourceNotFoundException("해당 학교는 등록되지 않았습니다"));
+    }
+
     @Transactional
     public boolean deleteSchool(String schoolName) {
         School school = schoolRepository.findByName(schoolName)
