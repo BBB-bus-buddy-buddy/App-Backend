@@ -11,12 +11,14 @@ import capston2024.bustracker.repository.SchoolRepository;
 import com.univcert.api.UnivCert;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,12 +26,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SchoolService {
     private static final String UNIV_API_KEY = ApiKeyConfig.getUnivApiKey();
-    private AuthService authService;
-    private SchoolRepository schoolRepository;
+
+    private final SchoolRepository schoolRepository;
 
     @Transactional
-    public boolean createSchool(String schoolName, OAuth2User principal) {
-        authService.validateAdmin(principal);
+    public boolean createSchool(String schoolName) {
         if (schoolRepository.existsByName(schoolName)) {
             throw new DuplicateResourceException("해당 학교는 이미 등록되어 있습니다.");
         }
@@ -48,8 +49,7 @@ public class SchoolService {
     }
 
     @Transactional
-    public boolean deleteSchool(String schoolName, OAuth2User principal) {
-        authService.validateAdmin(principal);
+    public boolean deleteSchool(String schoolName) {
         School school = schoolRepository.findByName(schoolName)
                 .orElseThrow(() -> new ResourceNotFoundException("해당 학교는 존재하지 않습니다."));
         schoolRepository.delete(school);
@@ -59,17 +59,17 @@ public class SchoolService {
 
 
 
-    public boolean authenticate(String schoolEmail, String schoolName, int code) {
+    public Map<String, Object> authenticate(String schoolEmail, String schoolName, int code) {
         try {
-            return UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code).get("success").equals(true);
+            return UnivCert.certifyCode(UNIV_API_KEY, schoolEmail, schoolName, code);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
     }
 
-    public boolean sendToEmail(String schoolEmail, String schoolName) {
+    public Map<String, Object> sendToEmail(String schoolEmail, String schoolName) {
         try {
-            return UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true).get("success").equals(true);
+            return UnivCert.certify(UNIV_API_KEY, schoolEmail, schoolName, true);
         } catch (IOException e){
             throw new ResourceNotFoundException("학교 이메일과 학교 이름을 찾을 수 없습니다.");
         }
