@@ -1,10 +1,13 @@
 package capston2024.bustracker.controller;
 
+import capston2024.bustracker.config.dto.SchoolAuthRequestDTO;
 import capston2024.bustracker.config.dto.SchoolRegisterDTO;
 import capston2024.bustracker.config.dto.ApiResponse;
+import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.exception.DuplicateResourceException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.service.AuthService;
 import capston2024.bustracker.service.SchoolService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,14 +24,15 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/admin")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 @Validated
 public class SchoolController {
 
     private final SchoolService schoolService;
+    private final AuthService authService;
 
-    @PostMapping("/school")
+    @PostMapping("/admin/school")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> createSchool(@Valid @RequestBody SchoolRegisterDTO request,
                                                              @AuthenticationPrincipal OAuth2User principal) {
@@ -37,7 +41,28 @@ public class SchoolController {
         return ResponseEntity.ok(new ApiResponse<>(created, "학교를 성공적으로 생성을 완료하였습니다."));
     }
 
-    @GetMapping("/school")
+    @PostMapping("/school/validation")
+    public ResponseEntity<ApiResponse<Boolean>> validateSchool(@Valid @RequestBody SchoolRegisterDTO request) {
+        log.info("validate school: {}", request.getSchoolName());
+        boolean created = schoolService.checkBySchoolName(request.getSchoolName());
+        return ResponseEntity.ok(new ApiResponse<>(created, "인증 가능한 학교입니다."));
+    }
+
+    @PostMapping("/school/mail")
+    public ResponseEntity<ApiResponse<Boolean>> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
+        boolean isSendMail = schoolService.sendToEmail(request.getSchoolEmail(), request.getSchoolName());
+        return ResponseEntity.ok(new ApiResponse<>(isSendMail, "성공적으로 메일 발송에 성공했습니다."));
+    }
+
+    @PostMapping("/school/code")
+    public ResponseEntity<ApiResponse<Boolean>> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
+        boolean isAuthenticated = schoolService.authenticate(request.getSchoolEmail(), request.getSchoolName(), request.getCode());
+        boolean isSuccess = isAuthenticated && authService.rankUpGuestToUser(principal, request.getSchoolName());
+        return ResponseEntity.ok(new ApiResponse<>(isSuccess, "성공적으로 학교 코드를 인증하였습니다."));
+    }
+
+
+    @GetMapping("admin/school")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<String>>> getAllSchools() {
         log.info("Retrieving all schools");
@@ -45,7 +70,7 @@ public class SchoolController {
         return ResponseEntity.ok(new ApiResponse<>(schools, "모든 학교 정보를 성공적으로 반환하였습니다."));
     }
 
-    @DeleteMapping("/school/{schoolName}")
+    @DeleteMapping("admin/school/{schoolName}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> deleteSchool(@PathVariable String schoolName,
                                                              @AuthenticationPrincipal OAuth2User principal) {

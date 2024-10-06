@@ -32,18 +32,6 @@ public class AuthController {
         return ResponseEntity.ok(new ApiResponse<>(obj, "성공적으로 유저의 정보를 조회하였습니다."));
     }
 
-    @PostMapping("/school/mail")
-    public ResponseEntity<ApiResponse<Boolean>> authenticateSchoolSendMail(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal){
-        boolean isSendMail = authService.sendToSchoolEmail(principal, request.getSchoolEmail(), request.getSchoolName());
-        return ResponseEntity.ok(new ApiResponse<>(isSendMail, "성공적으로 메일 발송에 성공했습니다."));
-    }
-
-    @PostMapping("/school/code")
-    public ResponseEntity<ApiResponse<Boolean>> authenticateSchool(@RequestBody SchoolAuthRequestDTO request, @AuthenticationPrincipal OAuth2User principal) throws AdditionalAuthenticationFailedException, java.io.IOException {
-        boolean isAuthenticated = authService.performSchoolAuthentication(principal, request.getSchoolEmail(), request.getSchoolName(), request.getCode());
-        return ResponseEntity.ok(new ApiResponse<>(isAuthenticated, "성공적으로 학교 코드를 인증하였습니다."));
-    }
-
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(request, response);
