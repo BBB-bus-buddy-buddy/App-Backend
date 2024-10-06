@@ -19,4 +19,14 @@ public class Station {
     private String name;
     private GeoJsonPoint location;
     private String organizationId;
+
+    @Override
+    public String toString() {
+        return "Station{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", location=" + location +
+                ", organizationId='" + organizationId + '\'' +
+                '}';
+    }
 }

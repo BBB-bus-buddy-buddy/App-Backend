@@ -20,10 +20,10 @@ public class StationService {
     private final StationRepository stationRepository;
 
     // 특정 name에 해당하는 정류장의 정보를 반환
-    public List<Station> getStation(String name) {
-        log.info("{} 정류장을 찾는 중입니다....", name);
+    public List<Station> getStation(String stationName) {
+        log.info("{} 정류장을 찾는 중입니다....", stationName);
         try {
-            return stationRepository.findByNameContaining(name);
+            return stationRepository.findByNameContainingIgnoreCase(stationName);
         } catch (RuntimeException e){
             throw new BusinessException(ErrorCode.GENERAL_ERROR);
         }
