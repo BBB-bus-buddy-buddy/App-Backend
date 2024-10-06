@@ -1,5 +1,6 @@
 package capston2024.bustracker.config;
 
+import capston2024.bustracker.handler.OAuth2LoginSuccessHandler;
 import capston2024.bustracker.service.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Slf4j
 public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
-
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -30,11 +31,10 @@ public class SecurityConfig {
                         .anyRequest().permitAll() // 나머지 URI는 모두 접근 허용
                 )
                 .oauth2Login(oauth2 -> oauth2
-                        .loginPage("/api/auth/login") // 로그인 페이지 설정
-                        .defaultSuccessUrl("/") // 로그인 성공 시 이동할 페이지
                         .userInfoEndpoint(userInfo -> userInfo
                                 .userService(customOAuth2UserService)
                         )
+                        .successHandler(oAuth2LoginSuccessHandler)
                 );
 
         return http.build();
