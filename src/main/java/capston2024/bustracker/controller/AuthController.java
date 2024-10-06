@@ -25,21 +25,6 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
-    @Value("${OAUTH_CLIENT_ID}")
-    String clientId;
-
-    @GetMapping("/login")
-    public ResponseEntity<String> getGoogleAuthorizationUrl(@RequestParam String redirectUri) {
-        String authorizationUri = "https://accounts.google.com/o/oauth2/v2/auth";
-        String scope = "email profile";
-
-        String authorizationUrl = authorizationUri + "?client_id=" + clientId
-                + "&redirect_uri=" + redirectUri
-                + "&response_type=code"
-                + "&scope=" + scope;
-
-        return ResponseEntity.ok(authorizationUrl);
-    }
 
     @GetMapping("/user")
     public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
