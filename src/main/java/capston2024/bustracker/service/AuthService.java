@@ -40,34 +40,17 @@ public class AuthService {
 
 
     // 학교 인증후 인증 완료 시 유저의 역할이 USER 로 변경됨
-    @Transactional
-    public boolean performSchoolAuthentication(OAuth2User principal, String studentEmail, String schoolName, int code) throws AdditionalAuthenticationFailedException, IOException {
+    public boolean rankUpGuestToUser(OAuth2User principal, String schoolName) {
         User user = getUserFromPrincipal(principal);
         if (user == null) {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
-
-        boolean isAuthenticated = schoolService.authenticate(studentEmail, schoolName, code);
-        if (isAuthenticated) {
-            user.updateRole(Role.USER);
-            user.setOrganizationId(SchoolIdGenerator.generateSchoolId(schoolName));
-            userRepository.save(user);
-            return true;
-        } else {
-            throw new AdditionalAuthenticationFailedException("기관 인증 실패: ", user.getEmail());
-        }
+        user.updateRole(Role.USER);
+        user.setOrganizationId(SchoolIdGenerator.generateSchoolId(schoolName));
+        userRepository.save(user);
+        return true;
     }
 
-    // 학교 이메일 보내기
-    @Transactional
-    public boolean sendToSchoolEmail(OAuth2User principal, String schoolEmail, String schoolName) {
-        User user = getUserFromPrincipal(principal);
-        if (user == null) {
-            throw new RuntimeException("존재하지 않는 회원입니다.");
-        }
-
-        return schoolService.sendToEmail(schoolEmail, schoolName);
-    }
 
     //로그아웃
     public void logout(HttpServletRequest request, HttpServletResponse response) {
