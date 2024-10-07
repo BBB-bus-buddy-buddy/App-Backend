@@ -9,6 +9,7 @@ import capston2024.bustracker.service.AuthService;
 import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,19 +26,21 @@ import java.util.Map;
  */
 @RestController
 @Slf4j
+@RequiredArgsConstructor
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    private AuthService authService;
+    private final AuthService authService;
 
     @PostMapping("/user")
-    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@RequestBody @AuthenticationPrincipal OAuth2User principal) {
+        log.debug("Received request for user details. Principal: {}", principal);
         if (principal == null) {
-            // 인증된 사용자가 없는 경우 처리
+            log.warn("No authenticated user found");
             throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
         }
         Map<String, Object> obj = authService.getUserDetails(principal);
+        log.debug("User details retrieved successfully: {}", obj);
         return ResponseEntity.ok(new ApiResponse<>(obj, "성공적으로 유저의 정보를 조회하였습니다."));
     }
 
