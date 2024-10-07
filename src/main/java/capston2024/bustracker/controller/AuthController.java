@@ -31,7 +31,7 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
-    @GetMapping("/user")
+    @PostMapping("/user")
     public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
         if (principal == null) {
             // 인증된 사용자가 없는 경우 처리
