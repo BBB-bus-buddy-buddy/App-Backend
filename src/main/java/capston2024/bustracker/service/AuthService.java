@@ -109,11 +109,14 @@ public class AuthService {
         if (user == null) {
             return Map.of("인증 상태", false);
         }
+        School school = schoolService.getSchoolByOrganizationId(user.getOrganizationId());
         return Map.of(
                 "인증 상태", true,
                 "name", user.getName(),
                 "email", user.getEmail(),
-                "role", user.getRoleKey()
+                "picture", user.getPicture(),
+                "role", user.getRoleKey(),
+                "school", school.getName()
         );
     }
 }
