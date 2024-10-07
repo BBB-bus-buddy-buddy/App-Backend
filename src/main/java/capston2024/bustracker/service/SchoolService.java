@@ -53,6 +53,10 @@ public class SchoolService {
         return schoolRepository.findByName(schoolName).orElseThrow(()->new ResourceNotFoundException("해당 학교는 등록되지 않았습니다"));
     }
 
+    public School getSchoolByOrganizationId(String id){
+        return schoolRepository.findById(id).orElseThrow(()-> new ResourceNotFoundException("해당 학교는 등록되지 않았습니다"));
+    }
+
     @Transactional
     public boolean deleteSchool(String schoolName) {
         School school = schoolRepository.findByName(schoolName)
