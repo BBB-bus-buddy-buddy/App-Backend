@@ -71,7 +71,7 @@ public class AuthService {
      */
     private User getUserFromPrincipal(OAuth2User principal) {
         String email = (String) principal.getAttributes().get("email");
-        return userRepository.findByEmail(email).orElse(null);
+        return userRepository.findByEmail(email).orElseThrow(()->new UnauthorizedException("사용자가 인증되지 않았습니다"));
     }
 
     /**
