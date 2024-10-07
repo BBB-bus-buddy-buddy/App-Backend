@@ -25,7 +25,7 @@ import java.util.Map;
  * 웹 MVC의 컨트롤러 역할
  * 계정 정보 유효성 검사 및 인증 관련 API 제공
  */
-@Controller
+@RestController
 @Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
