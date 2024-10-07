@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
@@ -24,7 +25,7 @@ import java.util.Map;
  * 웹 MVC의 컨트롤러 역할
  * 계정 정보 유효성 검사 및 인증 관련 API 제공
  */
-@RestController
+@Controller
 @Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
@@ -32,8 +33,8 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/user")
-    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@RequestBody @AuthenticationPrincipal OAuth2User principal) {
+    @GetMapping("/user")
+    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
         log.debug("Received request for user details. Principal: {}", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
