@@ -1,5 +1,6 @@
 package capston2024.bustracker.exception;
 
+import jakarta.validation.GroupSequence;
 import lombok.Getter;
 
 @Getter

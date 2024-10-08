@@ -35,7 +35,7 @@ public class AuthController {
 
     @GetMapping("/user")
     public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
-        log.debug("Received request for user details. Principal: {}", principal);
+        log.info("Received request for user details. Principal: {}", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
             throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
