@@ -1,21 +1,21 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.domain.auth.OAuthAttributes;
-import capston2024.bustracker.config.dto.GoogleInfoDTO;
 import capston2024.bustracker.domain.User;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
-import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
+import java.util.Map;
 
 /**
  * 구글 로그인 이후 가져온 사용자의 정보를 기반으로
@@ -23,29 +23,30 @@ import java.util.Collections;
  */
 @RequiredArgsConstructor
 @Service
-public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
-    private final HttpSession httpSession;
+public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private final AuthService authService;
 
     @Override
+    @Transactional
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
-        OAuth2UserService<OAuth2UserRequest, OAuth2User> delegate = new DefaultOAuth2UserService();
-        OAuth2User oAuth2User = delegate.loadUser(userRequest);
+        OAuth2User oAuth2User = super.loadUser(userRequest);
+        Map<String, Object> attributes = oAuth2User.getAttributes();
 
-        //registrationId - 현재 로그인 진행 중인 서비스를 구분하는 코드(default google)
         String registrationId = userRequest.getClientRegistration().getRegistrationId();
-        //userNameAttributeName - 이후 네이버 로그인과 구글 로그인을 동시 지원하기 위해 사용
-        String userNameAttributeName = userRequest.getClientRegistration().getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName();
+        String userNameAttributeName = userRequest.getClientRegistration().getProviderDetails()
+                .getUserInfoEndpoint().getUserNameAttributeName();
 
-        OAuthAttributes attributes = OAuthAttributes.of(registrationId, userNameAttributeName, oAuth2User.getAttributes());
+        OAuthAttributes oAuthAttributes = OAuthAttributes.of(registrationId, attributes);
+        User user = authService.authenticateUser(oAuthAttributes);
 
-        User user = authService.authenticateUser(attributes);
+        // 사용자의 권한 정보를 가져옵니다.
+        GrantedAuthority authority = new SimpleGrantedAuthority(user.getRoleKey());
 
-        httpSession.setAttribute("user", new GoogleInfoDTO(user));
-
-        return new DefaultOAuth2User(Collections.singleton(new SimpleGrantedAuthority(user.getRoleKey())),
-                attributes.getAttributes(),
-                attributes.getNameAttributeKey());
+        // OAuth2User 객체를 생성하여 반환합니다.
+        return new DefaultOAuth2User(
+                Collections.singleton(authority),
+                attributes,
+                userNameAttributeName
+        );
     }
-
 }
