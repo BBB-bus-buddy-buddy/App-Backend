@@ -25,11 +25,13 @@ import java.util.stream.Collectors;
 import static capston2024.bustracker.exception.ErrorCode.INVALID_TOKEN;
 
 @Component
-@RequiredArgsConstructor
 public class JwtTokenProvider {
 
-    @Value("${jwt.secret}")
-    private String key;
+    public JwtTokenProvider(@Value("${JWT_SECRET}") String key, TokenService tokenService) {
+        this.key = key;
+        this.tokenService = tokenService;
+    }
+    private final String key;
     private SecretKey secretKey;
     private static final long ACCESS_TOKEN_EXPIRE_TIME = 1000 * 60 * 30L;
     private static final long REFRESH_TOKEN_EXPIRE_TIME = 1000 * 60 * 60L * 24 * 7;
