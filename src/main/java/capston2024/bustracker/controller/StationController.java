@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @RestController
 @Slf4j
 @RequestMapping("/api/station")
-@CrossOrigin(origins = "http://localhost:3001")
+@CrossOrigin(origins = "http://localhost:3000")
 public class StationController {
 
     private final StationService stationService;
