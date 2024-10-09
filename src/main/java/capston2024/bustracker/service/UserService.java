@@ -42,20 +42,26 @@ public class UserService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         List<DBRef> stationRefs = user.getMyStations();
+        log.info("stationRefs : {}", stationRefs);
 
-        List<ObjectId> stationIds = stationRefs.stream()
-                .map(DBRef::getId)
-                .map(id -> new ObjectId(id.toString()))
+        List<ObjectId> objectIds = stationRefs.stream()
+                .map(ref -> new ObjectId(ref.getId().toString()))
                 .collect(Collectors.toList());
 
-        Query query = new Query(Criteria.where("_id").in(stationIds));
-        List<Station> stations = mongoOperations.find(query, Station.class, "stations");
+        log.info("objectIds : {}", objectIds);
+
+        Query query = new Query(Criteria.where("_id").in(objectIds));
+        log.info("Executing query: {}", query.toString());
+
+        List<Station> stations = mongoOperations.find(query, Station.class);
+
+        log.info("stations : {}", stations);
 
         // 원래 순서 유지를 위한 정렬
         Map<ObjectId, Station> stationMap = stations.stream()
-                .collect(Collectors.toMap(station -> new ObjectId(station.getId()), station -> station));
+                .collect(Collectors.toMap(s -> new ObjectId(s.getId()), station -> station));
 
-        List<Station> orderedStations = stationIds.stream()
+        List<Station> orderedStations = objectIds.stream()
                 .map(stationMap::get)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -64,7 +70,6 @@ public class UserService {
 
         return orderedStations;
     }
-
 
     public boolean addMyStation(String email, String stationId) {
         log.info("{} 사용자의 내 정류장 목록에 {}를 추가 중...", email, stationId);
@@ -100,8 +105,9 @@ public class UserService {
     public boolean deleteMyStation(String email, String stationId) {
         log.info("사용자 {}의 내 정류장 {} 삭제를 시작합니다.", email, stationId);
 
-        Query query = new Query(Criteria.where("email").is(email));
-        Update update = new Update().pull("myStations", new DBRef("stations", new ObjectId(stationId)));
+        Query query = new Query(Criteria.where("email").is(email)
+                .and("myStations").elemMatch(Criteria.where("$id").is(stationId)));
+        Update update = new Update().pull("myStations", new DBRef("stations", stationId));
 
         var result = mongoOperations.updateFirst(query, update, User.class);
 
