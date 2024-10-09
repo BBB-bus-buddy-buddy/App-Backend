@@ -1,6 +1,5 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
@@ -19,24 +18,16 @@ public class StationService {
 
     private final StationRepository stationRepository;
 
-    // 특정 name에 해당하는 정류장의 정보를 반환
-    public List<Station> getStation(String stationName) {
+    // 정류장 이름으로 검색
+    public List<Station> getStationName(String stationName) {
         log.info("{} 정류장을 찾는 중입니다....", stationName);
-        try {
-            return stationRepository.findByNameContainingIgnoreCase(stationName);
-        } catch (RuntimeException e){
-            throw new BusinessException(ErrorCode.GENERAL_ERROR);
-        }
+        return stationRepository.findByNameContainingIgnoreCase(stationName);
     }
 
-    // 모든 정류장을 가져옴
+    // 모든 정류장 조회
     public List<Station> getAllStations() {
         log.info("모든 정류장을 불러들이는 중...");
-        try {
-            return stationRepository.findAll();
-        } catch (RuntimeException e){
-            throw new BusinessException(ErrorCode.GENERAL_ERROR);
-        }
+        return stationRepository.findAll();
     }
 
     // 특정 ID로 정류장 조회
@@ -46,22 +37,27 @@ public class StationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND));
     }
 
-    // 새로운 정류장 추가
+    // 새로운 정류장 추가 - 유효성 검사 포함
     public Station createStation(Station station) {
         log.info("새로운 정류장 추가 중: {}", station.getName());
+
+        // 중복된 정류장이 존재하는지 확인
         if (stationRepository.findByName(station.getName()).isPresent()) {
             throw new BusinessException(ErrorCode.DUPLICATE_ENTITY);
         }
+
         return stationRepository.save(station);
     }
 
-    // 정류장 업데이트
+    // 정류장 업데이트 - 유효성 검사 포함
     public Station updateStation(String id, Station updatedStation) {
         log.info("ID {}로 정류장 업데이트 중...", id);
         Station existingStation = getStationById(id);  // 존재 여부 확인
+
         existingStation.setName(updatedStation.getName());
         existingStation.setLocation(updatedStation.getLocation());
         existingStation.setOrganizationId(updatedStation.getOrganizationId());
+
         return stationRepository.save(existingStation);
     }
 
@@ -72,14 +68,20 @@ public class StationService {
         stationRepository.delete(station);
     }
 
-    // 정류정 유효성 검사
-    protected boolean isValidStation(BusRegisterDTO busRegisterDTO) {
-        List<String> stationNames = busRegisterDTO.getStationNames();
+    // 정류장 이름 목록을 받아 유효성 검사
+    public boolean isValidStationNames(List<String> stationNames) {
+        log.info("정류장 이름 목록의 유효성 검사 중...");
+
         for (String stationName : stationNames) {
-            Optional<Station> station = stationRepository.findByName(stationName);
-            if (station.isEmpty())
+            // 정류장 이름을 통해 해당 정류장 객체를 찾음
+            Optional<Station> stationOpt = stationRepository.findByName(stationName);
+
+            if (stationOpt.isEmpty()) {
+                log.warn("유효하지 않은 정류장 발견: {}", stationName);
                 return false;
+            }
         }
+
         return true;
     }
 }

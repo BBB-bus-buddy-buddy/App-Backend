@@ -5,10 +5,8 @@ import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.config.dto.BusSeatDTO;
 import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
-import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
-import capston2024.bustracker.repository.StationRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -28,7 +26,7 @@ public class BusService {
     private final StationService stationService;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
-        if(stationService.isValidStation(busRegisterDTO)){
+        if(stationService.isValidStationNames(busRegisterDTO.getStationNames())){
             Bus bus = Bus.builder()
                     .busNumber(busRegisterDTO.getBusNumber())
                     .stationsNames(busRegisterDTO.getStationNames())
