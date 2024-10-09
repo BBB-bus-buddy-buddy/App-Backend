@@ -26,7 +26,7 @@ public class UserController {
     private final UserService userService;
     private final AuthService authService;
     // 내 정류장 조회
-    @GetMapping("my-station")
+    @GetMapping("/my-station")
     public ResponseEntity<ApiResponse<List<Station>>> getMyStationList(@AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
@@ -68,7 +68,7 @@ public class UserController {
     }
 
     // 내 정류장 삭제
-    @DeleteMapping("my-station")
+    @DeleteMapping("/my-station")
     public ResponseEntity<ApiResponse<Boolean>> deleteMyStation(@RequestBody MyStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
