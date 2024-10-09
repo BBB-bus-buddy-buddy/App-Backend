@@ -11,6 +11,8 @@ import com.mongodb.DBRef;
 import com.mongodb.client.result.UpdateResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -18,6 +20,9 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -27,16 +32,37 @@ public class UserService {
     private final UserRepository userRepository;
     private final StationRepository stationRepository;
     private final MongoTemplate mongoTemplate;
+    private final MongoOperations mongoOperations;
 
     //내 정류장 조회
     public List<Station> getMyStationList(String email) {
-        log.warn("Email {} 사용자의 내 정류장 목록 조회를 시작합니다.", email);
-        // 사용자 조회
+        log.info("Email {} 사용자의 내 정류장 목록 조회를 시작합니다.", email);
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        // 사용자의 내 정류장 목록 반환
-        return user.getMyStations();
+
+        List<DBRef> stationRefs = user.getMyStations();
+
+        List<ObjectId> stationIds = stationRefs.stream()
+                .map(DBRef::getId)
+                .map(id -> new ObjectId(id.toString()))
+                .collect(Collectors.toList());
+
+        Query query = new Query(Criteria.where("_id").in(stationIds));
+        List<Station> stations = mongoOperations.find(query, Station.class, "stations");
+
+        // 원래 순서 유지를 위한 정렬
+        Map<ObjectId, Station> stationMap = stations.stream()
+                .collect(Collectors.toMap(station -> new ObjectId(station.getId()), station -> station));
+
+        List<Station> orderedStations = stationIds.stream()
+                .map(stationMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        log.info("사용자 {}의 내 정류장 목록 조회 완료. 총 {} 개의 정류장이 있습니다.", email, orderedStations.size());
+
+        return orderedStations;
     }
 
 
@@ -72,23 +98,20 @@ public class UserService {
 
     // 내 정류장 삭제
     public boolean deleteMyStation(String email, String stationId) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Station station = findByStationWithException(stationId);
+        log.info("사용자 {}의 내 정류장 {} 삭제를 시작합니다.", email, stationId);
 
-        if (user.getMyStations().contains(station))
+        Query query = new Query(Criteria.where("email").is(email));
+        Update update = new Update().pull("myStations", new DBRef("stations", new ObjectId(stationId)));
+
+        var result = mongoOperations.updateFirst(query, update, User.class);
+
+        if (result.getModifiedCount() == 0) {
+            log.warn("사용자 {}의 내 정류장 목록에서 정류장 {}을 찾을 수 없습니다.", email, stationId);
             throw new BusinessException(ErrorCode.ENTITY_NOT_FOUND);
+        }
 
-        List<Station> list = user.getMyStations();
-        list.remove(station);
-        user.setMyStations(list);
+        log.info("사용자 {}의 내 정류장 {} 삭제가 완료되었습니다.", email, stationId);
         return true;
-    }
-
-    // 정류장 탐색 + 예외처리
-    private Station findByStationWithException(String stationId) {
-        return stationRepository.findById(stationId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND));
     }
 
 }
