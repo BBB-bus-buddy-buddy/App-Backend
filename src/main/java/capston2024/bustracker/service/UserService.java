@@ -21,54 +21,47 @@ public class UserService {
     private final UserRepository userRepository;
     private final StationRepository stationRepository;
 
-    // 내 정류장 조회 -> 여기서는 MyStationRequestDTO가 사용되지 않습니다(userId만 필요)
-    public List<Station> getMyStationList(String userId) {
-        log.warn("ID {} 사용자의 내 정류장 목록 조회를 시작합니다.", userId);
+    //내 정류장 조회
+    public List<Station> getMyStationList(String email) {
+        log.warn("Email {} 사용자의 내 정류장 목록 조회를 시작합니다.", email);
         // 사용자 조회
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         // 사용자의 내 정류장 목록 반환
         return user.getMyStations();
     }
 
     // 내 정류장 추가
-    public boolean addMyStation(String userId, String stationId) {
-        log.info("{} 사용자의 내 정류장 목록에 {}를 추가 중...", userId, stationId);
+    public boolean addMyStation(String email, String stationId) {
+        log.info("{} 사용자의 내 정류장 목록에 {}를 추가 중...", email, stationId);
         // 사용자 조회
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         // 정류장 조회
         Station station = stationRepository.findById(stationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND));
         // 정류장 중복 확인
         if (user.getMyStations().contains(station)) {
-            log.warn("이미 {} 사용자가 등록한 정류장입니다: {}", userId, stationId);
+            log.warn("이미 {} 사용자가 등록한 정류장입니다: {}", email, stationId);
             throw new BusinessException(ErrorCode.DUPLICATE_ENTITY);
         }
         // 정류장 추가
         user.getMyStations().add(station);
-        userRepository.save(user);
         return true;
     }
 
     // 내 정류장 삭제
-    public boolean deleteMyStation(String userId, String stationId) {
-        User user = findByUserWithException(userId);
+    public boolean deleteMyStation(String email, String stationId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         Station station = findByStationWithException(stationId);
 
         if (user.getMyStations().contains(station))
             throw new BusinessException(ErrorCode.ENTITY_NOT_FOUND);
 
         user.getMyStations().remove(station);
-        userRepository.save(user);
         return true;
-    }
-
-    // 유저 탐색 + 예외처리
-    private User findByUserWithException(String userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
     // 정류장 탐색 + 예외처리
