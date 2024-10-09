@@ -1,7 +1,6 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.StationSearchDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.service.StationService;
 import lombok.extern.slf4j.Slf4j;
@@ -23,62 +22,56 @@ public class StationController {
         this.stationService = stationService;
     }
 
-    // 정류장 이름으로 조회
-    @PostMapping("/search")
-    public ResponseEntity<ApiResponse<List<Station>>> getStation(@RequestBody StationSearchDTO stationName) {
-        log.info("검색 할 버스정류장의 이름: {}", stationName.getName());
-        List<Station> stations = stationService.getStation(stationName.getName());
-        if (stations.isEmpty()) {
-            log.warn("해당 정류장을 찾을 수 없습니다: {}", stationName.getName());
+    // 정류장 이름으로 조회 또는 모든 정류장 조회
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<Station>>> getStations(@RequestParam(required = false) String name) {
+        if (name != null && !name.isEmpty()) {
+            // 정류장 이름으로 조회
+            log.info("정류장 이름으로 조회: {}", name);
+            List<Station> stations = stationService.getStationName(name);
+            if (stations.isEmpty()) {
+                log.warn("해당 정류장을 찾을 수 없습니다: {}", name);
+                return ResponseEntity.ok(new ApiResponse<>(stations, "해당 정류장이 없습니다."));
+            }
+            log.info("검색된 버스정류장 이름: {}",
+                    stations.stream()
+                            .map(Station::getName)
+                            .collect(Collectors.joining(", ")));
+            return ResponseEntity.ok(new ApiResponse<>(stations, "버스 정류장 검색이 성공적으로 완료되었습니다."));
+        } else {
+            // 모든 정류장 조회
+            log.info("모든 정류장 조회 요청");
+            List<Station> stations = stationService.getAllStations();
+            if (stations.isEmpty()) {
+                log.warn("정류장이 없습니다.");
+                return ResponseEntity.ok(new ApiResponse<>(stations, "정류장이 없습니다."));
+            }
+            return ResponseEntity.ok(new ApiResponse<>(stations, "모든 정류장 조회 완료"));
         }
-        log.info("검색된 버스정류장 이름: {}",
-                stations.stream()
-                        .map(Station::getName)  // 각 Station 객체에서 name 필드만 추출
-                        .collect(Collectors.joining(", ")));  // 추출한 name 필드를 콤마로 구분하여 출력
-
-        return ResponseEntity.ok(new ApiResponse<>(stations, "버스 정류장 검색이 성공적으로 완수되었습니다."));
     }
 
-    // 모든 정류장 조회
-    @GetMapping("/all")
-    public ResponseEntity<List<Station>> getAllStation() {
-        log.info("모든 정류장 조회 요청");
-        List<Station> stations = stationService.getAllStations();
-        if (stations.isEmpty()) {
-            log.warn("정류장을 찾을 수 없습니다");
-        }
-        return ResponseEntity.ok(stations);
-    }
 
-    // 정류장 ID로 조회
-    @GetMapping("/{id}")
-    public ResponseEntity<Station> getStationById(@PathVariable String id) {
-        log.info("ID {}로 정류장 조회 중...", id);
-        Station station = stationService.getStationById(id);
-        return ResponseEntity.ok(station);
-    }
-
-    // 새로운 정류장 추가
-    @PostMapping("/create")
-    public ResponseEntity<Station> createStation(@RequestBody Station station) {
-        log.info("새로운 정류장 추가 요청: {}", station.getName());
+    // 정류장 등록
+    @PostMapping
+    public ResponseEntity<ApiResponse<Station>> createStation(@RequestBody Station station) {
+        log.info("새로운 정류장 등록 요청: {}", station.getName());
         Station createdStation = stationService.createStation(station);
-        return ResponseEntity.ok(createdStation);
+        return ResponseEntity.ok(new ApiResponse<>(createdStation, "정류장이 성공적으로 등록되었습니다."));
     }
 
-    // 정류장 정보 수정
-    @PutMapping("/update/{id}")
-    public ResponseEntity<Station> updateStation(@PathVariable String id, @RequestBody Station station) {
-        log.info("ID {}로 정류장 업데이트 요청", id);
+    // 정류장 업데이트
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<Station>> updateStation(@PathVariable String id, @RequestBody Station station) {
+        log.info("정류장 ID {}로 업데이트 요청", id);
         Station updatedStation = stationService.updateStation(id, station);
-        return ResponseEntity.ok(updatedStation);
+        return ResponseEntity.ok(new ApiResponse<>(updatedStation, "정류장이 성공적으로 업데이트되었습니다."));
     }
 
     // 정류장 삭제
-    @DeleteMapping("/delete/{id}")
-    public ResponseEntity<Void> deleteStation(@PathVariable String id) {
-        log.info("ID {}로 정류장 삭제 요청", id);
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteStation(@PathVariable String id) {
+        log.info("정류장 ID {}로 삭제 요청", id);
         stationService.deleteStation(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(new ApiResponse<>(null, "정류장이 성공적으로 삭제되었습니다."));
     }
 }
