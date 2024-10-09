@@ -37,11 +37,6 @@ public class UserController {
         String email = (String)obj.get("email");
         List<Station> myStationList = userService.getMyStationList(email);
 
-        if(myStationList.isEmpty()) {
-            log.warn("{}님의 내 정류장이 없습니다.", email);
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(new ApiResponse<>(null, "내 정류장 목록이 비어있습니다."));
-        }
-
         log.info("{}님의 내 정류장이 조회되었습니다.", email);
         return ResponseEntity.ok(new ApiResponse<>(myStationList, "내 정류장 조회가 성공적으로 완료되었습니다."));
     }
