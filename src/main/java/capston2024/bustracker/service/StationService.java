@@ -60,7 +60,7 @@ public class StationService {
         // 새로운 정류장 생성
         Station newStation = Station.builder()
                 .name(createStationDTO.getName())
-                .location(new GeoJsonPoint(createStationDTO.getCoordinate().x, createStationDTO.getCoordinate().y))
+                .location(new GeoJsonPoint(createStationDTO.getLatitude(), createStationDTO.getLongitude()))
                 .organizationId(organizationId) // 사용자 소속 정보 추가
                 .build();
 
