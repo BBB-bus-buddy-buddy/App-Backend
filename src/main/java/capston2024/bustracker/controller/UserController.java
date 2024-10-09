@@ -26,7 +26,7 @@ public class UserController {
     private final UserService userService;
     private final AuthService authService;
     // 내 정류장 조회
-    @GetMapping("my-station")
+    @GetMapping("/my-station")
     public ResponseEntity<ApiResponse<List<Station>>> getMyStationList(@AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
@@ -36,11 +36,6 @@ public class UserController {
         Map<String, Object> obj = authService.getUserDetails(principal);
         String email = (String)obj.get("email");
         List<Station> myStationList = userService.getMyStationList(email);
-
-        if(myStationList.isEmpty()) {
-            log.warn("{}님의 내 정류장이 없습니다.", email);
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(new ApiResponse<>(null, "내 정류장 목록이 비어있습니다."));
-        }
 
         log.info("{}님의 내 정류장이 조회되었습니다.", email);
         return ResponseEntity.ok(new ApiResponse<>(myStationList, "내 정류장 조회가 성공적으로 완료되었습니다."));
@@ -68,7 +63,7 @@ public class UserController {
     }
 
     // 내 정류장 삭제
-    @DeleteMapping("my-station")
+    @DeleteMapping("/my-station")
     public ResponseEntity<ApiResponse<Boolean>> deleteMyStation(@RequestBody MyStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
