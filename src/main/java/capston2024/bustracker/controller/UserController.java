@@ -63,18 +63,17 @@ public class UserController {
     }
 
     // 내 정류장 삭제
-    @DeleteMapping("/my-station")
-    public ResponseEntity<ApiResponse<Boolean>> deleteMyStation(@RequestBody MyStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
+    @DeleteMapping("/my-station/{stationId}")
+    public ResponseEntity<ApiResponse<Boolean>> deleteMyStation(@PathVariable String stationId, @AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
             throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
         }
-        Map<String, Object> obj = authService.getUserDetails(principal);
-        String email = (String)obj.get("email");
+        String email = principal.getAttribute("email");
 
-        log.info("정류장 {}을 사용자 {}의 내 정류장 목록에서 삭제 요청", request.getStationId(), email);
-        boolean isSuccess = userService.deleteMyStation(email, request.getStationId());
+        log.info("정류장 {}을 사용자 {}의 내 정류장 목록에서 삭제 요청", stationId, email);
+        boolean isSuccess = userService.deleteMyStation(email, stationId);
         if(isSuccess)
             return ResponseEntity.ok(new ApiResponse<>(true, "내 정류장이 성공적으로 삭제되었습니다."));
         else
