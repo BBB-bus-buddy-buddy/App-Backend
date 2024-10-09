@@ -1,7 +1,12 @@
 package capston2024.bustracker.domain.auth;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.User;
+import org.checkerframework.checker.units.qual.A;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import javax.crypto.KeyGenerator;
@@ -17,6 +22,7 @@ public class UserCreator {
                 .name(attributes.getName())
                 .email(attributes.getEmail())
                 .picture(attributes.getPicture())
+                .myStations(new ArrayList<>())
                 .role(Role.GUEST)
                 .build();
     }
