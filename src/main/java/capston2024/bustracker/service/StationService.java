@@ -48,7 +48,6 @@ public class StationService {
 
         // OAuth2 사용자 정보 가져오기
         Map<String, Object> userInfo = authService.getUserDetails(userPrincipal);
-        String email = (String) userInfo.get("email");
         String organizationId = (String) userInfo.get("organizationId"); // 사용자 소속 정보
 
         // 중복된 정류장이 있는지 확인
