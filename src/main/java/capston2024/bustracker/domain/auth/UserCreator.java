@@ -17,12 +17,12 @@ import javax.crypto.KeyGenerator;
 public class UserCreator {
 
     public static User createUserFrom(OAuthAttributes attributes) {
-
+        List<Station> list = new ArrayList<>();
         return User.builder()
                 .name(attributes.getName())
                 .email(attributes.getEmail())
                 .picture(attributes.getPicture())
-                .myStations(new ArrayList<>())
+                .myStations(list)
                 .role(Role.GUEST)
                 .build();
     }
