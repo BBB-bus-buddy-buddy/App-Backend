@@ -1,11 +1,13 @@
 package capston2024.bustracker.service;
 
+import capston2024.bustracker.config.dto.CreateStationDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
@@ -43,22 +45,22 @@ public class StationService {
     }
 
     // 새로운 정류장 추가
-    public Station createStation(OAuth2User userPrincipal, Station station) {
-        log.info("새로운 정류장 추가 중: {}", station.getName());
+    public Station createStation(OAuth2User userPrincipal, CreateStationDTO createStationDTO) {
+        log.info("새로운 정류장 추가 중: {}", createStationDTO.getName());
 
         // OAuth2 사용자 정보 가져오기
         Map<String, Object> userInfo = authService.getUserDetails(userPrincipal);
         String organizationId = (String) userInfo.get("organizationId"); // 사용자 소속 정보
 
         // 중복된 정류장이 있는지 확인
-        if (stationRepository.findByName(station.getName()).isPresent()) {
+        if (stationRepository.findByName(createStationDTO.getName()).isPresent()) {
             throw new BusinessException(ErrorCode.DUPLICATE_ENTITY, "이미 존재하는 정류장입니다.");
         }
 
         // 새로운 정류장 생성
         Station newStation = Station.builder()
-                .name(station.getName())
-                .location(station.getLocation())
+                .name(createStationDTO.getName())
+                .location(new GeoJsonPoint(createStationDTO.getCoordinate().x, createStationDTO.getCoordinate().y))
                 .organizationId(organizationId) // 사용자 소속 정보 추가
                 .build();
 

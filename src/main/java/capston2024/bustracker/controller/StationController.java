@@ -1,6 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
+import capston2024.bustracker.config.dto.CreateStationDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.service.StationService;
@@ -11,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.awt.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -56,10 +58,10 @@ public class StationController {
 
     // 정류장 등록
     @PostMapping
-    public ResponseEntity<ApiResponse<Station>> createStation(@AuthenticationPrincipal OAuth2User user, @RequestBody Station station) {
-        log.info("새로운 정류장 등록 요청: {}", station.getName());
+    public ResponseEntity<ApiResponse<Station>> createStation(@AuthenticationPrincipal OAuth2User user, @RequestBody CreateStationDTO createStationDTO) {
+        log.info("새로운 정류장 등록 요청: {}", createStationDTO.getName());
         try {
-            Station createdStation = stationService.createStation(user, station);
+            Station createdStation = stationService.createStation(user, createStationDTO);
             return ResponseEntity.ok(new ApiResponse<>(createdStation, "정류장이 성공적으로 등록되었습니다."));
         } catch (BusinessException e) {
             log.error("정류장 등록 실패: {}", e.getMessage());
