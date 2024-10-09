@@ -3,11 +3,9 @@ package capston2024.bustracker.service;
 import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.School;
 import capston2024.bustracker.domain.User;
-import capston2024.bustracker.domain.auth.*;
-import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
-import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.domain.auth.OAuthAttributes;
+import capston2024.bustracker.domain.auth.UserCreator;
 import capston2024.bustracker.exception.UnauthorizedException;
-import capston2024.bustracker.repository.SchoolRepository;
 import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,7 +17,6 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.util.Map;
 
 @Service
@@ -116,7 +113,8 @@ public class AuthService {
                 "email", user.getEmail(),
                 "picture", user.getPicture(),
                 "role", user.getRoleKey(),
-                "school", school.getName()
+                "school", school.getName(),
+                "organizationId", school.getId()
         );
     }
 }
