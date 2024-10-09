@@ -6,9 +6,11 @@ import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -17,6 +19,9 @@ import java.util.Optional;
 public class StationService {
 
     private final StationRepository stationRepository;
+    private final AuthService authService;
+    private final SchoolService schoolService;
+
 
     // 정류장 이름으로 검색
     public List<Station> getStationName(String stationName) {
@@ -37,16 +42,28 @@ public class StationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND));
     }
 
-    // 새로운 정류장 추가 - 유효성 검사 포함
-    public Station createStation(Station station) {
+    // 새로운 정류장 추가
+    public Station createStation(OAuth2User userPrincipal, Station station) {
         log.info("새로운 정류장 추가 중: {}", station.getName());
 
-        // 중복된 정류장이 존재하는지 확인
+        // OAuth2 사용자 정보 가져오기
+        Map<String, Object> userInfo = authService.getUserDetails(userPrincipal);
+        String email = (String) userInfo.get("email");
+        String organizationId = (String) userInfo.get("organizationId"); // 사용자 소속 정보
+
+        // 중복된 정류장이 있는지 확인
         if (stationRepository.findByName(station.getName()).isPresent()) {
-            throw new BusinessException(ErrorCode.DUPLICATE_ENTITY);
+            throw new BusinessException(ErrorCode.DUPLICATE_ENTITY, "이미 존재하는 정류장입니다.");
         }
 
-        return stationRepository.save(station);
+        // 새로운 정류장 생성
+        Station newStation = Station.builder()
+                .name(station.getName())
+                .location(station.getLocation())
+                .organizationId(organizationId) // 사용자 소속 정보 추가
+                .build();
+
+        return stationRepository.save(newStation);
     }
 
     // 정류장 업데이트 - 유효성 검사 포함
