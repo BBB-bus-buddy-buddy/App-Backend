@@ -40,7 +40,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             if (authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_GUEST"))) {
                 return URI + "/enter-code";
             } else if (authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_USER")) ||
-                    authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN"))) {
+                    authentication.getAuthorities().contains(new SimpleGrantedAuthority("ADMIN"))) {
                 return URI + "/home";
             } else {
                 return URI;
