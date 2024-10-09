@@ -46,8 +46,9 @@ public class UserService {
             log.warn("이미 {} 사용자가 등록한 정류장입니다: {}", email, stationId);
             throw new BusinessException(ErrorCode.DUPLICATE_ENTITY);
         }
-        // 정류장 추가
-        user.getMyStations().add(station);
+        List<Station> list = user.getMyStations();
+        list.add(station);
+        user.setMyStations(list);
         return true;
     }
 
@@ -60,7 +61,9 @@ public class UserService {
         if (user.getMyStations().contains(station))
             throw new BusinessException(ErrorCode.ENTITY_NOT_FOUND);
 
-        user.getMyStations().remove(station);
+        List<Station> list = user.getMyStations();
+        list.remove(station);
+        user.setMyStations(list);
         return true;
     }
 
