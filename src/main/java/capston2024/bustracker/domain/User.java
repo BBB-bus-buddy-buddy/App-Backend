@@ -2,6 +2,7 @@ package capston2024.bustracker.domain;
 
 import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.auth.BaseEntity;
+import com.mongodb.DBRef;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import org.springframework.data.annotation.Id;
@@ -32,7 +33,7 @@ public class User extends BaseEntity {
     private String picture;
     private Role role;
     private String organizationId; // 기관 인증 Id
-    private List<Station> myStations;
+    private List<DBRef> myStations;
 
     public void updateRole(Role role){
         this.role = role;
