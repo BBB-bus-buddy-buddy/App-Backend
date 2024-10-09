@@ -48,6 +48,7 @@ public class UserService {
         }
         List<Station> list = user.getMyStations();
         list.add(station);
+        log.info("사용자의 내 정류장 목록에 {}를 추가 중...", list);
         user.setMyStations(list);
         return true;
     }
