@@ -1,5 +1,6 @@
 package capston2024.bustracker.handler;
 
+import capston2024.bustracker.config.status.Role;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -37,10 +38,10 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     }
 
         protected String determineTargetUrl(Authentication authentication) {
-            if (authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_GUEST"))) {
+            if (authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.GUEST.getKey()))) {
                 return URI + "/enter-code";
-            } else if (authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_USER")) ||
-                    authentication.getAuthorities().contains(new SimpleGrantedAuthority("ADMIN"))) {
+            } else if (authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.USER.getKey())) ||
+                    authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.ADMIN.getKey()))) {
                 return URI + "/home";
             } else {
                 return URI;
