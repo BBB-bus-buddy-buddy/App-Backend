@@ -3,6 +3,7 @@ package capston2024.bustracker.domain.auth;
 import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.User;
+import com.mongodb.DBRef;
 import org.checkerframework.checker.units.qual.A;
 
 import java.util.ArrayList;
@@ -17,7 +18,7 @@ import javax.crypto.KeyGenerator;
 public class UserCreator {
 
     public static User createUserFrom(OAuthAttributes attributes) {
-        List<Station> list = new ArrayList<>();
+        List<DBRef> list = new ArrayList<>();
         return User.builder()
                 .name(attributes.getName())
                 .email(attributes.getEmail())
