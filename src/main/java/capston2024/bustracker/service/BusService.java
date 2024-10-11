@@ -5,12 +5,16 @@ import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.config.dto.BusSeatDTO;
 import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +31,7 @@ public class BusService {
 
     private final BusRepository busRepository;
     private final StationService stationService;
+    private final MongoTemplate mongoTemplate;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
         List<String> stationNames = busRegisterDTO.getStationNames();
@@ -89,6 +94,11 @@ public class BusService {
     // 특정 버스 조회
     public Bus getBusByNumber(String busNumber) {
         return busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+    }
+
+    public List<Bus> getBusesByStationId(String stationId){
+        Query query = new Query(Criteria.where("station").elemMatch(Criteria.where("$id").is(stationId)));
+        return mongoTemplate.find(query, Bus.class);
     }
 
     /**
