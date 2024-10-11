@@ -1,5 +1,6 @@
 package capston2024.bustracker.domain;
 
+import com.mongodb.DBRef;
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -22,6 +23,6 @@ public class Bus {
     private int occupiedSeats; // 앉은 좌석 수
     private int availableSeats; // 남은 좌석 수
     private GeoJsonPoint location; // 좌표 정보 (GeoJSON 형식)
-    private List<String> stationsNames; // 버스의 노선(정류장 이름 목록)
+    private List<DBRef> stations; // 버스의 노선(정류장들의 DBRef)
     private Instant timestamp; // 위치 정보 최신화
 }

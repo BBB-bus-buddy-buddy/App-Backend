@@ -7,6 +7,7 @@ import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
+import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -14,8 +15,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -26,12 +29,21 @@ public class BusService {
     private final StationService stationService;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
-        if(stationService.isValidStationNames(busRegisterDTO.getStationNames())){
+        List<String> stationNames = busRegisterDTO.getStationNames();
+
+        if (stationService.isValidStationNames(stationNames)) {
+            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+                    ? stationNames.stream()
+                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .collect(Collectors.toList())
+                    : new ArrayList<>();
+
             Bus bus = Bus.builder()
                     .busNumber(busRegisterDTO.getBusNumber())
-                    .stationsNames(busRegisterDTO.getStationNames())
+                    .stations(stationRefs)
                     .totalSeats(busRegisterDTO.getTotalSeats())
                     .build();
+
             busRepository.save(bus);
             return true;
         }
@@ -47,11 +59,26 @@ public class BusService {
     // 3. 버스 수정 - 전체 버스 수정 사항
     // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
     public boolean modifyBus(BusDTO busDTO) {
-            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
-            bus.setStationsNames(busDTO.getStationsNames());
-            bus.setBusNumber(bus.getBusNumber());
-            bus.setTotalSeats(bus.getTotalSeats());
+        List<String> stationNames = busDTO.getStationNames();
+
+        if (stationService.isValidStationNames(stationNames)) {
+            Bus bus = busRepository.findById(busDTO.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+
+            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+                    ? stationNames.stream()
+                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .collect(Collectors.toList())
+                    : new ArrayList<>();
+
+            bus.setStations(stationRefs);
+            bus.setBusNumber(busDTO.getBusNumber());
+            bus.setTotalSeats(busDTO.getTotalSeats());
+
+            busRepository.save(bus);
             return true;
+        }
+        return false;
     }
 
     // 4. 모든 버스 조회
