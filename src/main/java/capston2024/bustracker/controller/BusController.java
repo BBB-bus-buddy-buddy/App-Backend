@@ -55,7 +55,7 @@ public class BusController {
         return ResponseEntity.ok(new ApiResponse<>(buses, "모든 버스가 성공적으로 조회되었습니다."));
     }
 
-    @GetMapping("/{stationId}")
+    @GetMapping("/stations/{stationId}")
     public ResponseEntity<ApiResponse<List<Bus>>> getBusesByStationId(@PathVariable String stationId){
         List<Bus> bus = busService.getBusesByStationId(stationId);
         return ResponseEntity.ok(new ApiResponse<>(bus, "버스 목록이 성공적으로 조회되었습니다."));
