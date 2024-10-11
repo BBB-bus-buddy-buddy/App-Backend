@@ -47,6 +47,10 @@ public class BusService {
                     .busNumber(busRegisterDTO.getBusNumber())
                     .stations(stationRefs)
                     .totalSeats(busRegisterDTO.getTotalSeats())
+                    .occupiedSeats(0)
+                    .availableSeats(busRegisterDTO.getTotalSeats())
+                    .location(new GeoJsonPoint(35.495299450684456, 129.4172414821444))
+                    .timestamp(Instant.now())
                     .build();
 
             busRepository.save(bus);
