@@ -3,6 +3,7 @@ package capston2024.bustracker.service;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
+import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -99,5 +100,10 @@ public class StationService {
         }
 
         return true;
+    }
+
+    public Object findStationIdByName(String name) {
+        Station station = stationRepository.findByName(name).orElseThrow(()->new ResourceNotFoundException("해당 이름에 존재하는 정류장이 없습니다"));
+        return station.getId();
     }
 }
