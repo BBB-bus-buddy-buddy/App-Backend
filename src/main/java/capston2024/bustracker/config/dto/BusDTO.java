@@ -13,5 +13,5 @@ public class BusDTO {
     private String id; // MongoDB에서 자동 생성될 _id
     private String busNumber;
     private int totalSeats; // 전체 좌석
-    private List<String> stationsNames; // 버스의 노선(정류장 이름 목록)
+    private List<String> stationNames; // 버스의 노선(정류장 이름 목록)
 }
