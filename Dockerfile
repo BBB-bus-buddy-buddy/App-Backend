@@ -10,14 +10,7 @@ WORKDIR /app
 COPY . .
 RUN chmod +x ./gradlew
 
-# Gradle 빌드 실행
-RUN ./gradlew build --no-daemon --info
-
-# 실행 스테이지
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-COPY --from=build /app/build/libs/*.jar app.jar
-
+# ARG 선언을 빌드 스테이지로 이동
 ARG SPRING_PROFILES_ACTIVE
 ARG DATABASE_NAME
 ARG MONGODB_URI
@@ -26,6 +19,22 @@ ARG OAUTH_SECRET_KEY
 ARG UNIV_API_KEY
 ARG KAKAO_REST_API_KEY
 ARG JWT_SECRET
+
+# Gradle 빌드 실행 시 환경 변수 전달
+RUN SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE} \
+    DATABASE_NAME=${DATABASE_NAME} \
+    MONGODB_URI=${MONGODB_URI} \
+    OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID} \
+    OAUTH_SECRET_KEY=${OAUTH_SECRET_KEY} \
+    UNIV_API_KEY=${UNIV_API_KEY} \
+    KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY} \
+    JWT_SECRET=${JWT_SECRET} \
+    ./gradlew build --no-daemon --info
+
+# 실행 스테이지
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/build/libs/*.jar app.jar
 
 ENV SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
 ENV DATABASE_NAME=${DATABASE_NAME}
