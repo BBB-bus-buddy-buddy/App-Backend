@@ -10,6 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set Spring Profiles Active
+        run: echo "SPRING_PROFILES_ACTIVE=prod" >> $GITHUB_ENV
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
@@ -24,11 +27,33 @@ jobs:
         with:
           push: true
           tags: taehun2/bustracker:${{ github.ref_name }}
+          build-args: |
+            SPRING_PROFILES_ACTIVE=prod
+            DATABASE_NAME=${{ secrets.DATABASE_NAME}}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            OAUTH_CLIENT_ID=${{ secrets.OAUTH_CLIENT_ID }}
+            OAUTH_SECRET_KEY=${{ secrets.OAUTH_SECRET_KEY }}
+            UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
+            KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
 
-
-      # 프로파일을 항상 prod로 설정
-      #- name: Set Spring Profiles Active
-      #  run: echo "SPRING_PROFILES_ACTIVE=prod" >> $GITHUB_ENV
+      - name: Trigger deployment
+        run: |
+          curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
+          -H "Content-Type: application/json" \
+          -d '{
+            "image": "taehun2/bustracker:${{ github.ref_name }}",
+            "env": {
+              "SPRING_PROFILES_ACTIVE": "prod",
+              "DATABASE_NAME"="${{ secrets.DATABASE_NAME}}"
+              "MONGODB_URI"="${{ secrets.MONGODB_URI }}"
+              "OAUTH_CLIENT_ID"="${{ secrets.OAUTH_CLIENT_ID }}"
+              "OAUTH_SECRET_KEY"="${{ secrets.OAUTH_SECRET_KEY }}"
+              "UNIV_API_KEY"="${{ secrets.UNIV_API_KEY }}"
+              "KAKAO_REST_API_KEY"=${{ secrets.KAKAO_REST_API_KEY }}"
+              "JWT_SECRET"="${{ secrets.JWT_SECRET }}"
+            }
+          }'
 
       # 빌드 및 테스트
       #- name: Build and Test with Gradle
@@ -44,11 +69,6 @@ jobs:
      #     name: app
      #     path: build/libs/*.jar
 
-      - name: Trigger deployment
-        run: |
-          curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
-          -H "Content-Type: application/json" \
-          -d '{"image": "taehun2/bustracker:${{ github.sha }}"}'
       # 배포 준비
       #- name: Prepare for deploy
       #  run: |
