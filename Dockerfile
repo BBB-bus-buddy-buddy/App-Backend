@@ -1,8 +1,10 @@
 # 빌드 스테이지
-FROM openjdk:21-jdk-alpine AS build
+FROM eclipse-temurin:21-jdk AS build
 
 # 필요한 빌드 도구 설치
-RUN apk add --no-cache findutils
+RUN apt-get update && apt-get install -y \
+    findutils \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . .
@@ -12,7 +14,7 @@ RUN chmod +x ./gradlew
 RUN ./gradlew build --no-daemon --info
 
 # 실행 스테이지
-FROM openjdk:21-jre-alpine
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 
