@@ -25,6 +25,15 @@ jobs:
           context: .
           push: true
           tags: taehun2/bustracker:${{ github.ref_name }}
+          build-args: |
+            SPRING_PROFILES_ACTIVE=prod
+            DATABASE_NAME=${{ secrets.DATABASE_NAME}}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            OAUTH_CLIENT_ID=${{ secrets.OAUTH_CLIENT_ID }}
+            OAUTH_SECRET_KEY=${{ secrets.OAUTH_SECRET_KEY }}
+            UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
+            KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
 
       - name: Trigger deployment
         run: |
