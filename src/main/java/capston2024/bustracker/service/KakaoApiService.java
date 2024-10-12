@@ -20,7 +20,7 @@ import java.util.Map;
 @Slf4j
 public class KakaoApiService {
 
-    @Value("${kakao-rest-api-key}")
+    @Value("${KAKAO_REST_API_KEY}")
     private String REST_API_KEY;
 
     @Autowired
