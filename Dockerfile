@@ -1,10 +1,8 @@
 # 빌드 스테이지
-FROM openjdk:21 AS build
+FROM openjdk:21-jdk-alpine AS build
 
 # 필요한 빌드 도구 설치
-RUN apt-get update && apt-get install -y \
-    findutils \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache findutils
 
 WORKDIR /app
 COPY . .
@@ -14,7 +12,7 @@ RUN chmod +x ./gradlew
 RUN ./gradlew build --no-daemon --info
 
 # 실행 스테이지
-FROM openjdk:21
+FROM openjdk:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 
