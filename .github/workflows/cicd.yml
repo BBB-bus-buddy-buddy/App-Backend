@@ -30,41 +30,44 @@ jobs:
           echo "KAKAO_REST_API_KEY is set: ${{ secrets.KAKAO_REST_API_KEY != '' }}"
           echo "JWT_SECRET is set: ${{ secrets.JWT_SECRET != '' }}"
 
-        - name: Build and push Docker image
-          uses: docker/build-push-action@v2
-          with:
-            context: .
-            push: true
-            tags: taehun2/bustracker:${{ github.ref_name }}
-            build-args: |
-              SPRING_PROFILES_ACTIVE="prod"
-              DATABASE_NAME="${{ secrets.DATABASE_NAME }}"
-              MONGODB_URI="${{ secrets.MONGODB_URI }}"
-              OAUTH_CLIENT_ID="${{ secrets.OAUTH_CLIENT_ID }}"
-              OAUTH_SECRET_KEY="${{ secrets.OAUTH_SECRET_KEY }}"
-              UNIV_API_KEY="${{ secrets.UNIV_API_KEY }}"
-              KAKAO_REST_API_KEY="${{ secrets.KAKAO_REST_API_KEY }}"
-              JWT_SECRET="${{ secrets.JWT_SECRET }}"
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: taehun2/bustracker:${{ github.ref_name }}
+          build-args: |
+            SPRING_PROFILES_ACTIVE=prod
+            DATABASE_NAME=${{ secrets.DATABASE_NAME }}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            OAUTH_CLIENT_ID=${{ secrets.OAUTH_CLIENT_ID }}
+            OAUTH_SECRET_KEY=${{ secrets.OAUTH_SECRET_KEY }}
+            UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
+            KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+          outputs: type=docker,dest=/tmp/image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-        - name: Load image
-          run: |
-            docker load --input /tmp/image.tar
-            docker image ls -a
+      - name: Load image
+        run: |
+          docker load --input /tmp/image.tar
+          docker image ls -a
 
-        - name: Trigger deployment
-          run: |
-            curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
-            -H "Content-Type: application/json" \
-            -d '{
-              "image": "taehun2/bustracker:${{ github.ref_name }}",
-              "env": {
-                "SPRING_PROFILES_ACTIVE": "prod",
-                "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
-                "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
-                "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
-                "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
-                "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
-                "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
-                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
-              }
-            }'
+      - name: Trigger deployment
+        run: |
+          curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
+          -H "Content-Type: application/json" \
+          -d '{
+            "image": "taehun2/bustracker:${{ github.ref_name }}",
+            "env": {
+              "SPRING_PROFILES_ACTIVE": "prod",
+              "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
+              "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
+              "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
+              "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
+              "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
+              "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
+              "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+            }
+          }'
