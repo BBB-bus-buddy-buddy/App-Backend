@@ -143,10 +143,12 @@ public class BusService {
     //파싱된 버스 위치정보는 무조건 modify 여야한다.
     private Bus parseCsvToBus(String csvData) {
         String[] parts = csvData.split(",");
+        log.info("받은 csvData : {}", csvData);
         if (parts.length < 2) {
             throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
         }
         Bus bus = getBusByNumber(parts[0]);
+        log.info("버스 객체 : {}", bus);
         bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
         bus.setTimestamp(Instant.now());
         return bus;
