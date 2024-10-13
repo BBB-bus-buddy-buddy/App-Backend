@@ -1,6 +1,6 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.CreateStationDTO;
+import capston2024.bustracker.config.dto.StationRequestDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
@@ -46,7 +46,7 @@ public class StationService {
     }
 
     // 새로운 정류장 추가
-    public Station createStation(OAuth2User userPrincipal, CreateStationDTO createStationDTO) {
+    public Station createStation(OAuth2User userPrincipal, StationRequestDTO createStationDTO) {
         log.info("새로운 정류장 추가 중: {}", createStationDTO.getName());
 
         // OAuth2 사용자 정보 가져오기
@@ -69,16 +69,38 @@ public class StationService {
     }
 
     // 정류장 업데이트 - 유효성 검사 포함
-    public Station updateStation(String id, Station updatedStation) {
-        log.info("ID {}로 정류장 업데이트 중...", id);
-        Station existingStation = getStationById(id);  // 존재 여부 확인
+    public boolean updateStation(OAuth2User userPrincipal, StationRequestDTO stationRequestDTO) {
+        log.info("{} 정류장 업데이트 중...", stationRequestDTO.getName());
 
-        existingStation.setName(updatedStation.getName());
-        existingStation.setLocation(updatedStation.getLocation());
-        existingStation.setOrganizationId(updatedStation.getOrganizationId());
+        try {
+            // OAuth2 사용자 정보 가져오기
+            Map<String, Object> userInfo = authService.getUserDetails(userPrincipal);
+            String organizationId = (String) userInfo.get("organizationId"); // 사용자 소속 정보
 
-        return stationRepository.save(existingStation);
+            // 업데이트할 정류장 찾기
+            Station existingStation = stationRepository.findByName(stationRequestDTO.getName())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "해당 이름의 정류장을 찾을 수 없습니다."));
+
+            // 정류장 정보 업데이트
+            existingStation.setName(stationRequestDTO.getName());
+            existingStation.setLocation(new GeoJsonPoint(stationRequestDTO.getLatitude(), stationRequestDTO.getLongitude()));
+            existingStation.setOrganizationId(organizationId); // 사용자 소속 정보 업데이트
+
+            // stationRepository.save()는 필요 없음, 변경 감지로 업데이트 반영
+            return true;  // 업데이트 성공
+
+        } catch (BusinessException e) {
+            log.error("정류장 업데이트 중 오류 발생 (비즈니스 예외): {}", e.getMessage());
+            return false;  // 비즈니스 예외 발생 시
+        } catch (Exception e) {
+            log.error("정류장 업데이트 중 시스템 오류 발생: {}", e.getMessage());
+            return false;  // 시스템 예외 발생 시
+        }
     }
+
+
+
+
 
     // 정류장 삭제
     public void deleteStation(String id) {

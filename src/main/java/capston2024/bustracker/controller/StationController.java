@@ -1,7 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.CreateStationDTO;
+import capston2024.bustracker.config.dto.StationRequestDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.service.StationService;
@@ -57,7 +57,7 @@ public class StationController {
 
     // 정류장 등록
     @PostMapping
-    public ResponseEntity<ApiResponse<Station>> createStation(@AuthenticationPrincipal OAuth2User user, @RequestBody CreateStationDTO createStationDTO) {
+    public ResponseEntity<ApiResponse<Station>> createStation(@AuthenticationPrincipal OAuth2User user, @RequestBody StationRequestDTO createStationDTO) {
         log.info("새로운 정류장 등록 요청: {}", createStationDTO.getName());
         try {
             Station createdStation = stationService.createStation(user, createStationDTO);
@@ -71,11 +71,28 @@ public class StationController {
 
     // 정류장 업데이트
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Station>> updateStation(@PathVariable String id, @RequestBody Station station) {
-        log.info("정류장 ID {}로 업데이트 요청", id);
-        Station updatedStation = stationService.updateStation(id, station);
-        return ResponseEntity.ok(new ApiResponse<>(updatedStation, "정류장이 성공적으로 업데이트되었습니다."));
+    public ResponseEntity<ApiResponse<String>> updateStation(
+            @AuthenticationPrincipal OAuth2User user,
+            @RequestBody StationRequestDTO stationRequestDTO) {
+
+        log.info("{} 정류장 업데이트 요청", stationRequestDTO.getName());
+
+        // 업데이트 작업 수행
+        boolean result = stationService.updateStation(user, stationRequestDTO);
+
+        if (result) {
+            // 성공적인 업데이트 응답
+            ApiResponse<String> response = new ApiResponse<>(null, "정류장이 성공적으로 업데이트되었습니다.");
+            return ResponseEntity.ok(response);
+        } else {
+            // 업데이트 실패 응답
+            ApiResponse<String> response = new ApiResponse<>(null, "정류장 업데이트에 실패했습니다.");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
     }
+
+
+
 
     // 정류장 삭제
     @DeleteMapping("/{id}")
