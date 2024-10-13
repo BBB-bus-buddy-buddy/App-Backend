@@ -29,17 +29,12 @@ public class KakaoApiController {
     private ObjectMapper objectMapper;
 
     @GetMapping("/arrival-time/single")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getSingleArrivalTime(
+    public ResponseEntity<ApiResponse<ArrivalTimeResponseDTO>> getSingleArrivalTime(
             @RequestParam ArrivalTimeRequestDTO origin,
             @RequestParam ArrivalTimeRequestDTO destination) {
         log.info("도착 예정 시간을 요청 받았습니다. 출발지: {}, 목적지: {}", origin, destination);
-        Integer arrivalTimeInSeconds = kakaoApiService.getArrivalTime(origin, destination);
-
-        ArrivalTimeResponseDTO arrivalTimeResponseDTO1 = new ArrivalTimeResponseDTO(origin.getName(), arrivalTimeInSeconds);
-        arrivalTimeResponseDTO1.getFormattedDuration();
-        Map map = new HashMap();
-        map.put(arrivalTimeResponseDTO1.getName(), arrivalTimeResponseDTO1.getFormattedDuration());
-        return ResponseEntity.ok(new ApiResponse<>(map, "도착예정시간이 성공적으로 조회되었습니다."));
+        String arrivalTimeInSeconds = kakaoApiService.getArrivalTime(origin, destination);
+        return ResponseEntity.ok(new ApiResponse<>(new ArrivalTimeResponseDTO(origin.getName(), arrivalTimeInSeconds), "도착예정시간이 성공적으로 조회되었습니다."));
     }
 
     @PostMapping("/arrival-time/multi")
@@ -106,9 +101,6 @@ public class KakaoApiController {
                     .body("예기치 않은 오류가 발생했습니다.");
         }
     }
-
-
-
 
 
 }

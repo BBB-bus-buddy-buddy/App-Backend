@@ -36,7 +36,7 @@ public class KakaoApiService {
      * @param destination
      * @return
      */
-    public Integer getArrivalTime(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
+    public String getArrivalTime(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
                 + "?origin=" + origin
                 + "&destination=" + destination
@@ -62,7 +62,15 @@ public class KakaoApiService {
             List<Map<String, Object>> routes = (List<Map<String, Object>>) body.get("routes");
             if (!routes.isEmpty()) {
                 Map<String, Object> summary = (Map<String, Object>) routes.get(0).get("summary");
-                return (Integer) summary.get("duration"); // 도착 예정 시간 (초 단위)
+                int duration = Integer.parseInt(summary.get("duration").toString()); // 도착 예정 시간 (초 단위)
+                int hours = duration / 3600;
+                int minutes = (duration % 3600) / 60;
+                int seconds = duration % 60;
+                StringBuilder formattedTime = new StringBuilder();
+                if (hours > 0) formattedTime.append(hours).append("시간 ");
+                if (minutes > 0) formattedTime.append(minutes).append("분 ");
+                if (seconds > 0 || formattedTime.length() == 0) formattedTime.append(seconds).append("초"); // 0초일 때도 출력해야 하는 경우
+                return formattedTime.toString();
             }
         }
         return null; // 도착 시간이 없을 때 null 반환
