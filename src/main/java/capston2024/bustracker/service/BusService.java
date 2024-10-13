@@ -11,6 +11,7 @@ import capston2024.bustracker.repository.BusRepository;
 import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -100,8 +101,8 @@ public class BusService {
         return busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
     }
 
-    public List<Bus> getBusesByStationId(String stationId){
-        Query query = new Query(Criteria.where("station").elemMatch(Criteria.where("$id").is(stationId)));
+    public List<Bus> getBusesByStationId(String stationId) {
+        Query query = new Query(Criteria.where("stations").is(new DBRef("station", new ObjectId(stationId))));
         return mongoTemplate.find(query, Bus.class);
     }
 
