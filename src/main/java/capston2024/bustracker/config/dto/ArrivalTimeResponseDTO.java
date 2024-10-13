@@ -1,5 +1,6 @@
 package capston2024.bustracker.config.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -7,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Getter
 @Setter
+@AllArgsConstructor
 public class ArrivalTimeResponseDTO {
+    private String name;
     private int duration;  // 도착까지의 총 소요 시간 (초 단위)
 
     // 시, 분, 초 단위로 변환하여 문자열로 반환하는 메소드

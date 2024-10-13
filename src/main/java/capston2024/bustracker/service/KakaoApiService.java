@@ -1,5 +1,6 @@
 package capston2024.bustracker.service;
 
+import capston2024.bustracker.config.dto.ArrivalTimeRequestDTO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +36,7 @@ public class KakaoApiService {
      * @param destination
      * @return
      */
-    public Integer getArrivalTime(String origin, String destination) {
+    public Integer getArrivalTime(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
                 + "?origin=" + origin
                 + "&destination=" + destination
