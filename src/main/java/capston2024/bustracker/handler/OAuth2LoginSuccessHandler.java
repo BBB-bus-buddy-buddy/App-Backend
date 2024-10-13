@@ -1,6 +1,8 @@
 package capston2024.bustracker.handler;
 
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.auth.TokenInfo;
+import capston2024.bustracker.service.TokenService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,14 +20,24 @@ import java.io.IOException;
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider tokenProvider;
+    private final TokenService tokenService;
     private static final String URI = "http://localhost:3000";
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException, ServletException {
-        // accessToken, refreshToken 발급
-        String accessToken = tokenProvider.generateAccessToken(authentication);
-        tokenProvider.generateRefreshToken(authentication, accessToken);
+        String username = authentication.getName();
+        TokenInfo existingToken = tokenService.findByUserName(username);
+
+        String accessToken;
+        if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
+            // 사용가능한 토큰이 있으면 계속 사용
+            accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
+        } else {
+            // 사용 가능한 토큰이 없으면 새로 토큰을 생성함
+            accessToken = tokenProvider.generateAccessToken(authentication);
+            tokenProvider.generateRefreshToken(authentication, accessToken);
+        }
 
         String redirectUri = determineTargetUrl(authentication);
 
