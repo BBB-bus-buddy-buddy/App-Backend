@@ -12,6 +12,7 @@ import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -32,7 +33,7 @@ public class BusService {
 
     private final BusRepository busRepository;
     private final StationService stationService;
-    private final MongoTemplate mongoTemplate;
+    private final MongoOperations mongoOperations;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
         List<String> stationNames = busRegisterDTO.getStationNames();
@@ -102,8 +103,12 @@ public class BusService {
     }
 
     public List<Bus> getBusesByStationId(String stationId) {
-        Query query = new Query(Criteria.where("stations").is(new DBRef("station", new ObjectId(stationId))));
-        return mongoTemplate.find(query, Bus.class);
+        log.info("해당 정류장이 포함된 버스를 찾는 중.. {}", stationId);
+        Query query = new Query(Criteria.where("stations").is(new DBRef("station", stationId)));
+        log.info("해당 정류장이 포함된 버스를 찾는 중.. {}", query);
+        List<Bus> bus = mongoOperations.find(query, Bus.class);
+        log.info("버스를 찾았습니다 : {}", bus);
+        return bus;
     }
 
     /**
