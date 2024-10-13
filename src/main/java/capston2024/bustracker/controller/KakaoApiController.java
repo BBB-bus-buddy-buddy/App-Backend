@@ -30,11 +30,15 @@ public class KakaoApiController {
 
     @GetMapping("/arrival-time/single")
     public ResponseEntity<ApiResponse<ArrivalTimeResponseDTO>> getSingleArrivalTime(
-            @RequestParam ArrivalTimeRequestDTO origin,
-            @RequestParam ArrivalTimeRequestDTO destination) {
+            @RequestParam String origin,
+            @RequestParam String destination) {
         log.info("도착 예정 시간을 요청 받았습니다. 출발지: {}, 목적지: {}", origin, destination);
-        String arrivalTimeInSeconds = kakaoApiService.getArrivalTime(origin, destination);
-        return ResponseEntity.ok(new ApiResponse<>(new ArrivalTimeResponseDTO(origin.getName(), arrivalTimeInSeconds), "도착예정시간이 성공적으로 조회되었습니다."));
+        String[] origins = origin.split(",");
+        ArrivalTimeRequestDTO originDTO = new ArrivalTimeRequestDTO(origins[0], Double.parseDouble(origins[1]), Double.parseDouble(origins[2]));
+        String[] destinations = destination.split(",");
+        ArrivalTimeRequestDTO destinationDTO = new ArrivalTimeRequestDTO(destinations[0], Double.parseDouble(destinations[1]), Double.parseDouble(destinations[2]));
+        String arrivalTimeInSeconds = kakaoApiService.getArrivalTime(originDTO, destinationDTO);
+        return ResponseEntity.ok(new ApiResponse<>(new ArrivalTimeResponseDTO(originDTO.getName(), arrivalTimeInSeconds), "도착예정시간이 성공적으로 조회되었습니다."));
     }
 
     @PostMapping("/arrival-time/multi")
