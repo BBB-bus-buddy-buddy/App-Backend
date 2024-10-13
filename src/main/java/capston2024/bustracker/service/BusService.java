@@ -5,17 +5,25 @@ import capston2024.bustracker.config.dto.BusRegisterDTO;
 import capston2024.bustracker.config.dto.BusSeatDTO;
 import capston2024.bustracker.config.dto.LocationDTO;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
+import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -24,14 +32,28 @@ public class BusService {
 
     private final BusRepository busRepository;
     private final StationService stationService;
+    private final MongoTemplate mongoTemplate;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
-        if(stationService.isValidStationNames(busRegisterDTO.getStationNames())){
+        List<String> stationNames = busRegisterDTO.getStationNames();
+
+        if (stationService.isValidStationNames(stationNames)) {
+            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+                    ? stationNames.stream()
+                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .collect(Collectors.toList())
+                    : new ArrayList<>();
+
             Bus bus = Bus.builder()
                     .busNumber(busRegisterDTO.getBusNumber())
-                    .stationsNames(busRegisterDTO.getStationNames())
+                    .stations(stationRefs)
                     .totalSeats(busRegisterDTO.getTotalSeats())
+                    .occupiedSeats(0)
+                    .availableSeats(busRegisterDTO.getTotalSeats())
+                    .location(new GeoJsonPoint(35.495299450684456, 129.4172414821444))
+                    .timestamp(Instant.now())
                     .build();
+
             busRepository.save(bus);
             return true;
         }
@@ -47,11 +69,26 @@ public class BusService {
     // 3. 버스 수정 - 전체 버스 수정 사항
     // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
     public boolean modifyBus(BusDTO busDTO) {
-            Bus bus = busRepository.findById(busDTO.getId()).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
-            bus.setStationsNames(busDTO.getStationsNames());
-            bus.setBusNumber(bus.getBusNumber());
-            bus.setTotalSeats(bus.getTotalSeats());
+        List<String> stationNames = busDTO.getStationNames();
+
+        if (stationService.isValidStationNames(stationNames)) {
+            Bus bus = busRepository.findById(busDTO.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+
+            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+                    ? stationNames.stream()
+                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .collect(Collectors.toList())
+                    : new ArrayList<>();
+
+            bus.setStations(stationRefs);
+            bus.setBusNumber(busDTO.getBusNumber());
+            bus.setTotalSeats(busDTO.getTotalSeats());
+
+            busRepository.save(bus);
             return true;
+        }
+        return false;
     }
 
     // 4. 모든 버스 조회
@@ -62,6 +99,11 @@ public class BusService {
     // 특정 버스 조회
     public Bus getBusByNumber(String busNumber) {
         return busRepository.findBusByBusNumber(busNumber).orElseThrow(()->new ResourceNotFoundException("버스를 찾을 수 없습니다."));
+    }
+
+    public List<Bus> getBusesByStationId(String stationId) {
+        Query query = new Query(Criteria.where("stations").is(new DBRef("station", new ObjectId(stationId))));
+        return mongoTemplate.find(query, Bus.class);
     }
 
     /**
@@ -102,10 +144,12 @@ public class BusService {
     //파싱된 버스 위치정보는 무조건 modify 여야한다.
     private Bus parseCsvToBus(String csvData) {
         String[] parts = csvData.split(",");
+        log.info("받은 csvData : {}", csvData);
         if (parts.length < 2) {
             throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
         }
         Bus bus = getBusByNumber(parts[0]);
+        log.info("버스 객체 : {}", bus);
         bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
         bus.setTimestamp(Instant.now());
         return bus;
