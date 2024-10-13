@@ -25,7 +25,7 @@ public class BusController {
     private final BusService busService;
 
     // 1. 버스 추가 (POST)
-    @PostMapping("/")
+    @PostMapping("")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> createBus(@RequestBody BusRegisterDTO busRegisterDTO) {
         boolean result = busService.createBus(busRegisterDTO);
@@ -41,7 +41,7 @@ public class BusController {
     }
 
     // 3. 버스 수정 (PUT)
-    @PutMapping("/")
+    @PutMapping("")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(@RequestBody BusDTO busDTO) {
         boolean result = busService.modifyBus(busDTO);
@@ -49,7 +49,7 @@ public class BusController {
     }
 
     // 4. 버스 조회 (GET)
-    @GetMapping("/")
+    @GetMapping("")
     public ResponseEntity<ApiResponse<List<Bus>>> getAllBuses() {
         List<Bus> buses = busService.getAllBuses();
         return ResponseEntity.ok(new ApiResponse<>(buses, "모든 버스가 성공적으로 조회되었습니다."));
