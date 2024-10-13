@@ -85,8 +85,6 @@ public class BusService {
             bus.setStations(stationRefs);
             bus.setBusNumber(busDTO.getBusNumber());
             bus.setTotalSeats(busDTO.getTotalSeats());
-
-            busRepository.save(bus);
             return true;
         }
         return false;
