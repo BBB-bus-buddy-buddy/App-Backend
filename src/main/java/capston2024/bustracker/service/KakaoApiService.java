@@ -38,8 +38,8 @@ public class KakaoApiService {
      */
     public String getArrivalTime(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
-                + "?origin=" + origin
-                + "&destination=" + destination
+                + "?origin=" + origin.getX() + "," + origin.getY()
+                + "&destination=" + destination.getX() + "," + destination.getY()
                 + "&waypoints="
                 + "&priority=RECOMMEND"
                 + "&car_fuel=GASOLINE"
