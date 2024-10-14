@@ -40,6 +40,11 @@ public class BusService {
         List<String> stationNames = busRegisterDTO.getStationNames();
 
         if (stationService.isValidStationNames(stationNames)) {
+            /* Stream 생성 - map - .collect(Collectors.toList())
+             List형을 개별 연산을 가능케하도록 Stream 구성,
+             map을 통해 개별적 연산 수행
+             수행된 연산을 .collect(Collectors.toList()) 통해 List로 다시 모음
+            */
             List<Bus.StationInfo> stationInfoList = stationNames != null && !stationNames.isEmpty()
                     ? stationNames.stream()
                     .map(name -> {
@@ -81,6 +86,11 @@ public class BusService {
             Bus bus = busRepository.findById(busDTO.getId())
                     .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다."));
 
+            /* Stream 생성 - map - .collect(Collectors.toList())
+             List형을 개별 연산을 가능케하도록 Stream 구성,
+             map을 통해 개별적 연산 수행
+             수행된 연산을 .collect(Collectors.toList()) 통해 List로 다시 모음
+            */
             List<Bus.StationInfo> stationInfoList = stationNames != null && !stationNames.isEmpty()
                     ? stationNames.stream()
                     .map(name -> {
@@ -161,7 +171,8 @@ public class BusService {
     }
 
     //파싱된 버스 위치정보는 무조건 modify 여야한다.
-    private Bus parseCsvToBus(String csvData) {
+    @Transactional
+    protected Bus parseCsvToBus(String csvData) {
         String[] parts = csvData.split(",");
         log.info("받은 csvData : {}", csvData);
         if (parts.length < 2) {
