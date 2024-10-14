@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 @Service
@@ -140,14 +141,16 @@ public class BusService {
      * @param csvData ( busNumber, location(lat, lst) )
      * @return CompletableFuture.xFuture(e)
      */
-    @Async("taskExecutor")
+    @Async
     public CompletableFuture<Bus> processBusLocationAsync(String csvData) {
-        try {
-            Bus bus = parseCsvToBus(csvData);
-            return CompletableFuture.completedFuture(bus);
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return parseCsvToBus(csvData);
+            } catch (Exception e) {
+                log.error("버스 위치 업데이트 중 오류 발생: {}", e.getMessage());
+                throw new CompletionException(e);
+            }
+        });
     }
 
     @Async("taskExecutor")
