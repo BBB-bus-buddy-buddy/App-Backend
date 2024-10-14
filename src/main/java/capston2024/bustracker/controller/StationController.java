@@ -26,6 +26,35 @@ public class StationController {
         this.stationService = stationService;
     }
 
+    // 정류장 이름으로 조회 또는 모든 정류장 조회
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<Station>>> getStations(@RequestParam(required = false) String name) {
+        if (name != null && !name.isEmpty()) {
+            // 정류장 이름으로 조회
+            log.info("정류장 이름으로 조회: {}", name);
+            List<Station> stations = stationService.getStationName(name);
+            if (stations.isEmpty()) {
+                log.warn("해당 정류장을 찾을 수 없습니다: {}", name);
+                return ResponseEntity.ok(new ApiResponse<>(stations, "해당 정류장이 없습니다."));
+            }
+            log.info("검색된 버스정류장 이름: {}",
+                    stations.stream()
+                            .map(Station::getName)
+                            .collect(Collectors.joining(", ")));
+            return ResponseEntity.ok(new ApiResponse<>(stations, "버스 정류장 검색이 성공적으로 완료되었습니다."));
+        } else {
+            // 모든 정류장 조회
+            log.info("모든 정류장 조회 요청");
+            List<Station> stations = stationService.getAllStations();
+            if (stations.isEmpty()) {
+                log.warn("정류장이 없습니다.");
+                return ResponseEntity.ok(new ApiResponse<>(stations, "정류장이 없습니다."));
+            }
+            return ResponseEntity.ok(new ApiResponse<>(stations, "모든 정류장 조회 완료"));
+        }
+    }
+
+
     // 정류장 등록
     @PostMapping
     public ResponseEntity<ApiResponse<Station>> createStation(@AuthenticationPrincipal OAuth2User user, @RequestBody StationRequestDTO createStationDTO) {
