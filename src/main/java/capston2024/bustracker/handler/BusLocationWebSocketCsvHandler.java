@@ -32,7 +32,7 @@ public class BusLocationWebSocketCsvHandler extends TextWebSocketHandler {
         busLocationService.processBusLocationAsync(csvData)
                 .thenAccept(bus -> {
                     try {
-                        session.sendMessage(new TextMessage("Location processed: " + bus.getId()));
+                        session.sendMessage(new TextMessage("Location processed"));
                     } catch (IOException e) {
                         log.error("Error sending confirmation", e);
                     }
