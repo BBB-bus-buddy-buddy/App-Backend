@@ -1,31 +1,28 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusDTO;
-import capston2024.bustracker.config.dto.BusRegisterDTO;
-import capston2024.bustracker.config.dto.BusSeatDTO;
-import capston2024.bustracker.config.dto.LocationDTO;
+import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
-import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.bson.types.ObjectId;
 import org.springframework.data.mongodb.core.MongoOperations;
-import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,6 +33,7 @@ public class BusService {
     private final BusRepository busRepository;
     private final StationService stationService;
     private final MongoOperations mongoOperations;
+    private final Map<String, BusLocationUpdateDTO> pendingUpdates = new ConcurrentHashMap<>();
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
         List<String> stationNames = busRegisterDTO.getStationNames();
@@ -142,17 +140,53 @@ public class BusService {
      * @return CompletableFuture.xFuture(e)
      */
     @Async
-    public CompletableFuture<Bus> processBusLocationAsync(String csvData) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return parseCsvToBus(csvData);
-            } catch (Exception e) {
-                log.error("버스 위치 업데이트 중 오류 발생: {}", e.getMessage());
-                throw new CompletionException(e);
+    public CompletableFuture<Void> processBusLocationAsync(String csvData) {
+        return CompletableFuture.runAsync(() -> {
+            BusLocationUpdateDTO update = parseCsvToBusUpdate(csvData);
+            BusLocationUpdateDTO existing = pendingUpdates.get(update.getBusNumber());
+
+            if (existing == null || update.getTimestamp().isAfter(existing.getTimestamp())) {
+                pendingUpdates.put(update.getBusNumber(), update);
             }
         });
     }
 
+    private BusLocationUpdateDTO parseCsvToBusUpdate(String csvData) {
+        String[] parts = csvData.split(",");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다. 형식: 버스번호,위도,경도");
+        }
+
+        String busNumber = parts[0];
+        double latitude = Double.parseDouble(parts[1]);
+        double longitude = Double.parseDouble(parts[2]);
+        Instant timestamp = Instant.now();
+
+        return new BusLocationUpdateDTO(busNumber, new GeoJsonPoint(longitude, latitude), timestamp);
+    }
+
+    @Scheduled(fixedRate = 5000)  // 5초마다 실행
+    public void flushLocationUpdates() {
+        List<BusLocationUpdateDTO> updates = new ArrayList<>(pendingUpdates.values());
+        pendingUpdates.clear();
+
+        for (BusLocationUpdateDTO update : updates) {
+            Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
+            Update mongoUpdate = new Update()
+                    .set("location", update.getLocation())
+                    .set("timestamp", update.getTimestamp());
+
+            mongoOperations.upsert(query, mongoUpdate, "Bus");
+        }
+
+        log.info("{} 개의 버스 위치 정보가 업데이트되었습니다.", updates.size());
+    }
+
+    /**
+     * 버스 좌석 정보 비동기 처리 (웹 소켓)
+     * @param csvData
+     * @return
+     */
     @Async("taskExecutor")
     public CompletableFuture<Bus> processBusSeatAsync(String csvData) {
         try {
@@ -170,21 +204,6 @@ public class BusService {
         Bus bus = getBusByNumber(parts[0]); //버스 번호 String
         bus.setOccupiedSeats(Integer.parseInt(parts[1])); // 버스 현재 차지된 좌석
         bus.setAvailableSeats(bus.getTotalSeats()-bus.getOccupiedSeats());
-        return bus;
-    }
-
-    //파싱된 버스 위치정보는 무조건 modify 여야한다.
-    @Transactional
-    protected Bus parseCsvToBus(String csvData) {
-        String[] parts = csvData.split(",");
-        log.info("받은 csvData : {}", csvData);
-        if (parts.length < 2) {
-            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
-        }
-        Bus bus = getBusByNumber(parts[0]);
-        log.info("버스 객체 : {}", bus);
-        bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
-        bus.setTimestamp(Instant.now());
         return bus;
     }
 
@@ -206,5 +225,37 @@ public class BusService {
         return locationDTO;
     }
 }
+
+
+/* 이전 코드
+//    @Async
+//    public CompletableFuture<Bus> processBusLocationAsync(String csvData) {
+//        return CompletableFuture.supplyAsync(() -> {
+//            try {
+//                return parseCsvToBus(csvData);
+//            } catch (Exception e) {
+//                log.error("버스 위치 업데이트 중 오류 발생: {}", e.getMessage());
+//                throw new CompletionException(e);
+//            }
+//        });
+//    }
+//
+//    //파싱된 버스 위치정보는 무조건 modify 여야한다.
+//    @Transactional
+//    protected Bus parseCsvToBus(String csvData) {
+//        String[] parts = csvData.split(",");
+//        log.info("받은 csvData : {}", csvData);
+//        if (parts.length < 2) {
+//            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
+//        }
+//        Bus bus = getBusByNumber(parts[0]);
+//        log.info("버스 객체 : {}", bus);
+//        bus.setLocation(new GeoJsonPoint(Double.parseDouble(parts[1]), Double.parseDouble(parts[2])));
+//        bus.setTimestamp(Instant.now());
+//        return bus;
+//    }
+//
+
+ */
 
 
