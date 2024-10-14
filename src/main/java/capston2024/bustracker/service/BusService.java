@@ -116,7 +116,7 @@ public class BusService {
     public List<Bus> getBusesByStationId(String stationId) {
         log.info("해당 정류장이 포함된 버스를 찾는 중.. stationId: {}", stationId);
 
-        Query query = new Query(Criteria.where("stationInfos.stationRef.$id").is(stationId));
+        Query query = new Query(Criteria.where("stations.stationRef.$id").is(stationId));
         log.info("생성된 쿼리: {}", query);
 
         List<Bus> buses = mongoOperations.find(query, Bus.class);
