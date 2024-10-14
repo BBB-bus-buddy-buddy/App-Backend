@@ -12,12 +12,14 @@ import com.mongodb.DBRef;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -32,21 +34,24 @@ public class BusService {
 
     private final BusRepository busRepository;
     private final StationService stationService;
-    private final MongoTemplate mongoTemplate;
+    private final MongoOperations mongoOperations;
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
         List<String> stationNames = busRegisterDTO.getStationNames();
 
         if (stationService.isValidStationNames(stationNames)) {
-            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+            List<Bus.StationInfo> stationInfoList = stationNames != null && !stationNames.isEmpty()
                     ? stationNames.stream()
-                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .map(name -> {
+                        String stationId = (String) stationService.findStationIdByName(name);
+                        return new Bus.StationInfo(new DBRef("station", stationId), name);
+                    })
                     .collect(Collectors.toList())
                     : new ArrayList<>();
 
             Bus bus = Bus.builder()
                     .busNumber(busRegisterDTO.getBusNumber())
-                    .stations(stationRefs)
+                    .stations(stationInfoList)
                     .totalSeats(busRegisterDTO.getTotalSeats())
                     .occupiedSeats(0)
                     .availableSeats(busRegisterDTO.getTotalSeats())
@@ -68,6 +73,7 @@ public class BusService {
 
     // 3. 버스 수정 - 전체 버스 수정 사항
     // 수정 사항 : 버스 정류장 이름, 버스 번호, 버스 전체 좌석
+    @Transactional
     public boolean modifyBus(BusDTO busDTO) {
         List<String> stationNames = busDTO.getStationNames();
 
@@ -75,17 +81,23 @@ public class BusService {
             Bus bus = busRepository.findById(busDTO.getId())
                     .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다."));
 
-            List<DBRef> stationRefs = stationNames != null && !stationNames.isEmpty()
+            List<Bus.StationInfo> stationInfoList = stationNames != null && !stationNames.isEmpty()
                     ? stationNames.stream()
-                    .map(name -> new DBRef("station", stationService.findStationIdByName(name)))
+                    .map(name -> {
+                        String stationId = (String) stationService.findStationIdByName(name);
+                        return new Bus.StationInfo(new DBRef("station", stationId), name);
+                    })
                     .collect(Collectors.toList())
                     : new ArrayList<>();
 
-            bus.setStations(stationRefs);
+            bus.setStations(stationInfoList);
             bus.setBusNumber(busDTO.getBusNumber());
             bus.setTotalSeats(busDTO.getTotalSeats());
 
-            busRepository.save(bus);
+            // 사용 가능한 좌석 수 업데이트
+            int occupiedSeats = bus.getOccupiedSeats();
+            bus.setAvailableSeats(Math.max(0, busDTO.getTotalSeats() - occupiedSeats));
+
             return true;
         }
         return false;
@@ -102,8 +114,15 @@ public class BusService {
     }
 
     public List<Bus> getBusesByStationId(String stationId) {
-        Query query = new Query(Criteria.where("stations").is(new DBRef("station", new ObjectId(stationId))));
-        return mongoTemplate.find(query, Bus.class);
+        log.info("해당 정류장이 포함된 버스를 찾는 중.. stationId: {}", stationId);
+
+        Query query = new Query(Criteria.where("stations.stationRef.$id").is(stationId));
+        log.info("생성된 쿼리: {}", query);
+
+        List<Bus> buses = mongoOperations.find(query, Bus.class);
+        log.info("찾은 버스 수: {}", buses.size());
+
+        return buses;
     }
 
     /**
