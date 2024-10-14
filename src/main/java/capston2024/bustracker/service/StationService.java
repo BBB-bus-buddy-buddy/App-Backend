@@ -69,7 +69,7 @@ public class StationService {
     }
 
     // 정류장 업데이트 - 유효성 검사 포함
-    public boolean updateStation(OAuth2User userPrincipal, StationRequestDTO stationRequestDTO) {
+    public boolean updateStation(OAuth2User userPrincipal, String stationId, StationRequestDTO stationRequestDTO) {
         log.info("{} 정류장 업데이트 중...", stationRequestDTO.getName());
 
         try {
@@ -77,16 +77,18 @@ public class StationService {
             Map<String, Object> userInfo = authService.getUserDetails(userPrincipal);
             String organizationId = (String) userInfo.get("organizationId"); // 사용자 소속 정보
 
-            // 업데이트할 정류장 찾기
-            Station existingStation = stationRepository.findByName(stationRequestDTO.getName())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "해당 이름의 정류장을 찾을 수 없습니다."));
+            // 업데이트할 정류장을 ID로 찾기
+            Station existingStation = stationRepository.findById(stationId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "해당 ID의 정류장을 찾을 수 없습니다."));
 
             // 정류장 정보 업데이트
             existingStation.setName(stationRequestDTO.getName());
             existingStation.setLocation(new GeoJsonPoint(stationRequestDTO.getLatitude(), stationRequestDTO.getLongitude()));
             existingStation.setOrganizationId(organizationId); // 사용자 소속 정보 업데이트
 
-            // stationRepository.save()는 필요 없음, 변경 감지로 업데이트 반영
+            // 변경 사항을 저장 (수동으로 save 호출 필요)
+            stationRepository.save(existingStation);
+
             return true;  // 업데이트 성공
 
         } catch (BusinessException e) {
