@@ -5,6 +5,7 @@ import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import com.mongodb.DBRef;
+import com.mongodb.client.result.UpdateResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoOperations;
@@ -142,14 +143,22 @@ public class BusService {
     @Async
     public CompletableFuture<Void> processBusLocationAsync(String csvData) {
         return CompletableFuture.runAsync(() -> {
-            BusLocationUpdateDTO update = parseCsvToBusUpdate(csvData);
-            BusLocationUpdateDTO existing = pendingUpdates.get(update.getBusNumber());
-
-            if (existing == null || update.getTimestamp().isAfter(existing.getTimestamp())) {
-                pendingUpdates.put(update.getBusNumber(), update);
+            try {
+                BusLocationUpdateDTO update = parseCsvToBusUpdate(csvData);
+                log.info("새로운 업데이트 수신: {}", update);
+                pendingUpdates.compute(update.getBusNumber(), (key, existing) -> {
+                    if (existing == null || update.getTimestamp().isAfter(existing.getTimestamp())) {
+                        log.info("업데이트 대기열에 추가: {}", update);
+                        return update;
+                    }
+                    return existing;
+                });
+            } catch (Exception e) {
+                log.error("버스 위치 처리 중 오류 발생: ", e);
             }
         });
     }
+
 
     private BusLocationUpdateDTO parseCsvToBusUpdate(String csvData) {
         String[] parts = csvData.split(",");
@@ -167,16 +176,24 @@ public class BusService {
 
     @Scheduled(fixedRate = 5000)  // 5초마다 실행
     public void flushLocationUpdates() {
-        List<BusLocationUpdateDTO> updates = new ArrayList<>(pendingUpdates.values());
-        pendingUpdates.clear();
+        List<BusLocationUpdateDTO> updates;
+        synchronized (pendingUpdates) {
+            updates = new ArrayList<>(pendingUpdates.values());
+            pendingUpdates.clear();
+        }
 
         for (BusLocationUpdateDTO update : updates) {
-            Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
-            Update mongoUpdate = new Update()
-                    .set("location", update.getLocation())
-                    .set("timestamp", update.getTimestamp());
+            try {
+                Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
+                Update mongoUpdate = new Update()
+                        .set("location", update.getLocation())
+                        .set("timestamp", update.getTimestamp());
 
-            mongoOperations.upsert(query, mongoUpdate, "Bus");
+                UpdateResult result = mongoOperations.upsert(query, mongoUpdate, "bus");  // 컬렉션 이름 확인
+                log.info("버스 업데이트 결과: {}, 업데이트된 문서: {}", result.wasAcknowledged(), result.getModifiedCount());
+            } catch (Exception e) {
+                log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
+            }
         }
 
         log.info("{} 개의 버스 위치 정보가 업데이트되었습니다.", updates.size());
