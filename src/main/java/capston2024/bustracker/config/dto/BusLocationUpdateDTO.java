@@ -11,7 +11,6 @@ import java.time.Instant;
 /**
  * 버스 위치 정보 처리 DTO
  */
-@AllArgsConstructor
 @RequiredArgsConstructor
 @Getter
 @Setter
