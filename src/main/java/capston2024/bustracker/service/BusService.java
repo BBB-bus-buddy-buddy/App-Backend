@@ -174,7 +174,7 @@ public class BusService {
         return new BusLocationUpdateDTO(busNumber, new GeoJsonPoint(longitude, latitude), timestamp);
     }
 
-    @Scheduled(fixedRate = 5000)  // 5초마다 실행
+    @Scheduled(fixedRate = 5000)
     public void flushLocationUpdates() {
         List<BusLocationUpdateDTO> updates;
         synchronized (pendingUpdates) {
@@ -189,8 +189,16 @@ public class BusService {
                         .set("location", update.getLocation())
                         .set("timestamp", update.getTimestamp());
 
-                UpdateResult result = mongoOperations.upsert(query, mongoUpdate, "bus");  // 컬렉션 이름 확인
-                log.info("버스 업데이트 결과: {}, 업데이트된 문서: {}", result.wasAcknowledged(), result.getModifiedCount());
+                log.info("업데이트 쿼리: {}", mongoUpdate);
+
+                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "bus");
+                log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
+                        update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
+
+                // 업데이트 후 문서 확인
+                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "bus");
+                log.info("업데이트된 버스 정보: {}", updatedBus);
+
             } catch (Exception e) {
                 log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
             }
