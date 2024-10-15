@@ -191,12 +191,12 @@ public class BusService {
 
                 log.info("업데이트 쿼리: {}", mongoUpdate);
 
-                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "bus");
+                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "Bus");
                 log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
                         update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
 
                 // 업데이트 후 문서 확인
-                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "bus");
+                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "Bus");
                 log.info("업데이트된 버스 정보: {}", updatedBus);
 
             } catch (Exception e) {
