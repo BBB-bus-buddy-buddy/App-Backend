@@ -61,6 +61,13 @@ public class BusController {
         return ResponseEntity.ok(new ApiResponse<>(bus, "버스 목록이 성공적으로 조회되었습니다."));
     }
 
+    //버스의 모든 정류장 이름 출력하기
+    @GetMapping("/stationNames/{busNumber}")
+    public ResponseEntity<ApiResponse<List<String>>> getStationsByBusNumber(@PathVariable String busNumber) {
+        List<String> stationList = busService.getAllStationNames(busNumber);
+        return ResponseEntity.ok(new ApiResponse<>(stationList, "해당 버스의 정류장 목록이 성공적으로 조회되었습니다."));
+    }
+
     // 특정 버스 조회 (GET)
     @GetMapping("/{busNumber}")
     public ResponseEntity<ApiResponse<Bus>> getBusByNumber(@PathVariable String busNumber) {
