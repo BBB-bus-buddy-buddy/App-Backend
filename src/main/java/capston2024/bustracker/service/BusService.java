@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -133,6 +134,14 @@ public class BusService {
         log.info("찾은 버스 수: {}", buses.size());
 
         return buses;
+    }
+
+    public List<String> getAllStationNames(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+
+        return bus.getStations().stream()
+                .map(Bus.StationInfo::getStationName)
+                .collect(Collectors.toList());
     }
 
     /**
