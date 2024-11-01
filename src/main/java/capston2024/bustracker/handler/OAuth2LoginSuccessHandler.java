@@ -21,7 +21,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
-    private static final String URI = "http://localhost:3000";
+    private static final String URI = "http://DevSe.gonetis.com:12599";
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
