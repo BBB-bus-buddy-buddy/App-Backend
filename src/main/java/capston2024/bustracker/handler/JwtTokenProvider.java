@@ -33,8 +33,8 @@ public class JwtTokenProvider {
     }
     private final String key;
     private SecretKey secretKey;
-    private static final long ACCESS_TOKEN_EXPIRE_TIME = 1000 * 60 * 30L;
-    private static final long REFRESH_TOKEN_EXPIRE_TIME = 1000 * 60 * 60L * 24 * 7;
+    private static final long ACCESS_TOKEN_EXPIRE_TIME = 1000 * 60 * 120L; // 2시간
+    private static final long REFRESH_TOKEN_EXPIRE_TIME = 1000 * 60 * 60L * 24 * 7; // 7일
     private static final String KEY_ROLE = "role";
     private final TokenService tokenService;
 
@@ -50,7 +50,9 @@ public class JwtTokenProvider {
 
     public void generateRefreshToken(Authentication authentication, String accessToken) {
         String refreshToken = generateToken(authentication, REFRESH_TOKEN_EXPIRE_TIME);
-        tokenService.saveToken(authentication.getName(), refreshToken, accessToken);
+        // 현재 시간 + REFRESH_TOKEN_EXPIRE_TIME으로 만료 시간 설정
+        Date expirationDate = new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRE_TIME);
+        tokenService.saveToken(authentication.getName(), refreshToken, accessToken, expirationDate);
     }
 
     private String generateToken(Authentication authentication, long expireTime) {

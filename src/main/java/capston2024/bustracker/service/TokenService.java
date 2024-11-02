@@ -5,6 +5,7 @@ import capston2024.bustracker.repository.TokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.Date;
 import java.util.Optional;
 
 @Component
@@ -12,8 +13,8 @@ import java.util.Optional;
 public class TokenService {
     private final TokenRepository tokenRepository;
 
-    public void saveToken(String username, String refreshToken, String accessToken) {
-        TokenInfo tokenInfo = new TokenInfo(username, refreshToken, accessToken);
+    public void saveToken(String username, String refreshToken, String accessToken, Date expiration) {
+        TokenInfo tokenInfo = new TokenInfo(username, refreshToken, accessToken, expiration);
         tokenRepository.save(tokenInfo);
     }
 
