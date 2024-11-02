@@ -22,6 +22,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
     private static final String URI = "http://localhost:3000";
+    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
@@ -31,10 +32,19 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
         String accessToken;
         if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
-            // 사용가능한 토큰이 있으면 계속 사용
-            accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
+            // 리프레시 토큰의 만료 시간 확인
+            long refreshTokenRemainTime = tokenProvider.getTokenExpirationTime(existingToken.getRefreshToken());
+
+            if (refreshTokenRemainTime > REFRESH_TOKEN_ROTATION_TIME) {
+                // 리프레시 토큰이 아직 충분히 유효한 경우
+                accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
+            } else {
+                // 리프레시 토큰의 만료가 임박한 경우 새로운 토큰 세트 발급
+                accessToken = tokenProvider.generateAccessToken(authentication);
+                tokenProvider.generateRefreshToken(authentication, accessToken);
+            }
         } else {
-            // 사용 가능한 토큰이 없으면 새로 토큰을 생성함
+            // 새로운 토큰 세트 발급
             accessToken = tokenProvider.generateAccessToken(authentication);
             tokenProvider.generateRefreshToken(authentication, accessToken);
         }
