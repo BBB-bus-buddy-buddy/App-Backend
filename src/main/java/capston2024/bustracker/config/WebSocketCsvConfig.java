@@ -1,7 +1,6 @@
 package capston2024.bustracker.config;
 
 import capston2024.bustracker.handler.BusLocationWebSocketCsvHandler;
-import capston2024.bustracker.handler.BusLocationWebSocketHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
