@@ -1,10 +1,12 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.StationRequestDTO;
+import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,7 @@ import java.util.Optional;
 public class StationService {
 
     private final StationRepository stationRepository;
+    private final BusRepository busRepository;
     private final AuthService authService;
     private final SchoolService schoolService;
 
@@ -108,7 +111,23 @@ public class StationService {
     public void deleteStation(String id) {
         log.info("ID {}로 정류장 삭제 중...", id);
         Station station = getStationById(id);  // 존재 여부 확인
+
+        // 해당 정류장을 포함하고 있는 모든 버스 조회
+        List<Bus> busesWithStation = busRepository.findByStationsContaining(station);
+
+        // 각 버스에서 해당 정류장을 노선에서 제거
+        for (Bus bus : busesWithStation) {
+            // StationInfo 리스트에서 stationRef의 id가 삭제할 정류장의 id와 일치하는 항목 제거
+            bus.getStations().removeIf(stationInfo ->
+                    stationInfo.getStationRef().getId().toString().equals(id));
+
+            busRepository.save(bus);  // 업데이트된 버스 정보 저장
+            log.info("버스 {}의 노선에서 정류장 {}가 삭제되었습니다.", bus.getBusNumber(), id);
+        }
+
+        // 정류장 삭제
         stationRepository.delete(station);
+        log.info("정류장 {}가 삭제되었습니다.", id);
     }
 
     // 정류장 이름 목록을 받아 유효성 검사

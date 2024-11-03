@@ -26,7 +26,7 @@ public class StationController {
         this.stationService = stationService;
     }
 
-    // 정류장 이름으로 조회 또는 모든 정류장 조회
+    // 정류장 이름으로 조회 또는 모든 정류장 조
     @GetMapping
     public ResponseEntity<ApiResponse<List<Station>>> getStations(@RequestParam(required = false) String name) {
         if (name != null && !name.isEmpty()) {
@@ -41,7 +41,7 @@ public class StationController {
                     stations.stream()
                             .map(Station::getName)
                             .collect(Collectors.joining(", ")));
-            return ResponseEntity.ok(new ApiResponse<>(stations, "버스 정류장 검색이 성공적으로 완료되었습니다."));
+            return ResponseEntity.ok(new ApiResponse<> (stations, "버스 정류장 검색이 성공적으로 완료되었습니다."));
         } else {
             // 모든 정류장 조회
             log.info("모든 정류장 조회 요청");
