@@ -17,6 +17,6 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(busLocationWebSocketHandler, "/arduino")
-                .setAllowedOriginPatterns("*");  // allowedOrigins 대신 allowedOriginPatterns 사용
+                .setAllowedOrigins("*");
     }
 }
