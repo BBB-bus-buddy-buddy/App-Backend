@@ -44,8 +44,28 @@ public class BusController {
     @PutMapping("")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(@RequestBody BusDTO busDTO) {
-        boolean result = busService.modifyBus(busDTO);
-        return ResponseEntity.ok(new ApiResponse<>(result, "버스가 성공적으로 수정되었습니다."));
+        try {
+            boolean result = busService.modifyBus(busDTO);
+            if (result) {
+                return ResponseEntity.ok(new ApiResponse<>(true, "버스가 성공적으로 수정되었습니다."));
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new ApiResponse<>(false, "버스 정보 수정에 실패했습니다."));
+            }
+        } catch (ResourceNotFoundException e) {
+            log.error("버스 수정 중 리소스를 찾을 수 없음: {}", e.getMessage());
+            throw e;  // 기존 ExceptionHandler에서 처리됨
+        } catch (IllegalArgumentException e) {
+            log.error("버스 수정 중 잘못된 입력값: {}", e.getMessage());
+            throw e;  // 기존 ExceptionHandler에서 처리됨
+        } catch (BusinessException e) {
+            log.error("버스 수정 중 비즈니스 로직 오류: {}", e.getMessage());
+            throw e;  // 기존 ExceptionHandler에서 처리됨
+        } catch (Exception e) {
+            log.error("버스 수정 중 예기치 않은 오류 발생: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>(false, "서버 오류가 발생했습니다."));
+        }
     }
 
     // 4. 버스 조회 (GET)
