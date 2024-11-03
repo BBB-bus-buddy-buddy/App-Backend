@@ -9,13 +9,14 @@ import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import java.time.Instant;
 
 /**
- * 버스 위치 정보 처리 DTO
+ * 버스 위치, 좌석 정보 처리 DTO
  */
 @RequiredArgsConstructor
 @Getter
 @Setter
-public class BusLocationUpdateDTO {
+public class BusUpdateDTO {
     private final String busNumber;
     private final GeoJsonPoint location;
     private final Instant timestamp;
+    private final int seats;
 }

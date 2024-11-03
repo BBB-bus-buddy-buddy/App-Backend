@@ -9,6 +9,7 @@ import com.mongodb.client.result.UpdateResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoOperations;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -19,10 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -35,7 +33,7 @@ public class BusService {
     private final BusRepository busRepository;
     private final StationService stationService;
     private final MongoOperations mongoOperations;
-    private final Map<String, BusLocationUpdateDTO> pendingUpdates = new ConcurrentHashMap<>();
+    private final Map<String, BusUpdateDTO> pendingUpdates = new ConcurrentHashMap<>();
 
     public boolean createBus(BusRegisterDTO busRegisterDTO) {
         List<String> stationNames = busRegisterDTO.getStationNames();
@@ -153,7 +151,7 @@ public class BusService {
     public CompletableFuture<Void> processBusLocationAsync(String csvData) {
         return CompletableFuture.runAsync(() -> {
             try {
-                BusLocationUpdateDTO update = parseCsvToBusUpdate(csvData);
+                BusUpdateDTO update = parseCsvToBusUpdate(csvData);
                 log.info("새로운 업데이트 수신: {}", update);
                 pendingUpdates.compute(update.getBusNumber(), (key, existing) -> {
                     if (existing == null || update.getTimestamp().isAfter(existing.getTimestamp())) {
@@ -169,34 +167,41 @@ public class BusService {
     }
 
 
-    private BusLocationUpdateDTO parseCsvToBusUpdate(String csvData) {
+    private BusUpdateDTO parseCsvToBusUpdate(String csvData) {
         String[] parts = csvData.split(",");
-        if (parts.length != 3) {
-            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다. 형식: 버스번호,위도,경도");
+        if (parts.length != 4) {
+            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다. 형식: 버스번호,위도,경도,좌석수");
         }
 
         String busNumber = parts[0];
         double latitude = Double.parseDouble(parts[1]);
         double longitude = Double.parseDouble(parts[2]);
+        int seats = Integer.parseInt(parts[3]);
         Instant timestamp = Instant.now();
 
-        return new BusLocationUpdateDTO(busNumber, new GeoJsonPoint(longitude, latitude), timestamp);
+        return new BusUpdateDTO(busNumber, new GeoJsonPoint(longitude, latitude), timestamp, seats);
     }
 
     @Scheduled(fixedRate = 5000)
     public void flushLocationUpdates() {
-        List<BusLocationUpdateDTO> updates;
+        List<BusUpdateDTO> updates;
         synchronized (pendingUpdates) {
             updates = new ArrayList<>(pendingUpdates.values());
             pendingUpdates.clear();
         }
 
-        for (BusLocationUpdateDTO update : updates) {
+        for (BusUpdateDTO update : updates) {
             try {
                 Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
+                Bus existingBus = mongoOperations.findOne(query, Bus.class);
+                int totalSeats = (existingBus != null)
+                        ? existingBus.getTotalSeats()
+                        : 40;  // 기본값
                 Update mongoUpdate = new Update()
                         .set("location", update.getLocation())
-                        .set("timestamp", update.getTimestamp());
+                        .set("timestamp", update.getTimestamp())
+                        .set("occupiedSeats", update.getSeats())
+                        .set("availableSeats", totalSeats-update.getSeats());
 
                 log.info("업데이트 쿼리: {}", mongoUpdate);
 
@@ -213,33 +218,9 @@ public class BusService {
             }
         }
 
-        log.info("{} 개의 버스 위치 정보가 업데이트되었습니다.", updates.size());
+        log.info("{} 개의 버스 위치와 좌석 정보가 업데이트되었습니다.", updates.size());
     }
 
-    /**
-     * 버스 좌석 정보 비동기 처리 (웹 소켓)
-     * @param csvData
-     * @return
-     */
-    @Async("taskExecutor")
-    public CompletableFuture<Bus> processBusSeatAsync(String csvData) {
-        try {
-            Bus bus = parseCsvToBusSeatsInfo(csvData);
-            return CompletableFuture.completedFuture(bus);
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-    private Bus parseCsvToBusSeatsInfo(String csvData) {
-        String[] parts = csvData.split(",");
-        if (parts.length < 2) {
-            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다.");
-        }
-        Bus bus = getBusByNumber(parts[0]); //버스 번호 String
-        bus.setOccupiedSeats(Integer.parseInt(parts[1])); // 버스 현재 차지된 좌석
-        bus.setAvailableSeats(bus.getTotalSeats()-bus.getOccupiedSeats());
-        return bus;
-    }
 
     public BusSeatDTO getBusSeatsByBusNumber(String busNumber) {
         Bus bus = getBusByNumber(busNumber);
