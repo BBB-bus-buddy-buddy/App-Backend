@@ -18,7 +18,6 @@ public class WebSocketCsvConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(busLocationWebSocketHandler, "/bus-location")
-                .setAllowedOrigins("*")
-                .withSockJS();  // SockJS 지원 추가 (옵션)
+                .setAllowedOriginPatterns("*");  // allowedOrigins 대신 allowedOriginPatterns 사용
     }
 }
