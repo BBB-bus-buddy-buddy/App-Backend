@@ -14,6 +14,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Component
 @RequiredArgsConstructor
@@ -21,10 +23,10 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
-//    private static final String URI = "https://devse.gonetis.com";
-    private static final String URI = "http://localhost:3000";
 
-    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
+    // 앱 스킴 URL
+    private static final String APP_SCHEME_URI = "org.reactjs.native.example.capstonBBBBNative://oauth2callback";
+    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L;
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
@@ -33,43 +35,44 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         TokenInfo existingToken = tokenService.findByUserName(username);
 
         String accessToken;
-        if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
-            // 리프레시 토큰의 만료 시간 확인
-            long refreshTokenRemainTime = tokenProvider.getTokenExpirationTime(existingToken.getRefreshToken());
+        try {
+            if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
+                long refreshTokenRemainTime = tokenProvider.getTokenExpirationTime(existingToken.getRefreshToken());
 
-            if (refreshTokenRemainTime > REFRESH_TOKEN_ROTATION_TIME) {
-                // 리프레시 토큰이 아직 충분히 유효한 경우
-                accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
+                if (refreshTokenRemainTime > REFRESH_TOKEN_ROTATION_TIME) {
+                    accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
+                } else {
+                    accessToken = tokenProvider.generateAccessToken(authentication);
+                    tokenProvider.generateRefreshToken(authentication, accessToken);
+                }
             } else {
-                // 리프레시 토큰의 만료가 임박한 경우 새로운 토큰 세트 발급
                 accessToken = tokenProvider.generateAccessToken(authentication);
                 tokenProvider.generateRefreshToken(authentication, accessToken);
             }
-        } else {
-            // 새로운 토큰 세트 발급
-            accessToken = tokenProvider.generateAccessToken(authentication);
-            tokenProvider.generateRefreshToken(authentication, accessToken);
+
+
+            // URL 인코딩된 토큰을 사용하여 리다이렉트 URL 생성
+            String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
+            String redirectUrl = UriComponentsBuilder
+                    .fromUriString(APP_SCHEME_URI)
+                    .queryParam("token", encodedToken)
+                    .build(false)  // URL 인코딩 비활성화 (이미 인코딩했으므로)
+                    .toUriString();
+
+            // CORS 헤더 추가
+            response.setHeader("Access-Control-Allow-Origin", "*");
+            response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+            response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+            // 리다이렉트 수행
+            response.sendRedirect(redirectUrl);
+
+        } catch (Exception e) {
+            // 에러 로깅
+            e.printStackTrace();
+            throw new ServletException("Authentication failed");
         }
-
-        String redirectUri = determineTargetUrl(authentication);
-
-        // 토큰 전달을 위한 redirect
-        String redirectUrl = UriComponentsBuilder.fromUriString(redirectUri)
-                .queryParam("token", accessToken)
-                .build().toUriString();
-
-        response.sendRedirect(redirectUrl);
     }
 
-        protected String determineTargetUrl(Authentication authentication) {
-            if (authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.GUEST.getKey()))) {
-                return URI + "/enter-code";
-            } else if (authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.USER.getKey())) ||
-                    authentication.getAuthorities().contains(new SimpleGrantedAuthority(Role.ADMIN.getKey()))) {
-                return URI + "/home";
-            } else {
-                return URI;
-            }
-        }
-
+    // determineTargetUrl 메서드는 이제 필요 없으므로 제거
 }

@@ -35,7 +35,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: taehun2/bustracker:${{ github.ref_name }}
+          tags: taehun2/bbb:${{ github.ref_name }}
           build-args: |
             SPRING_PROFILES_ACTIVE=prod
             DATABASE_NAME=${{ secrets.DATABASE_NAME }}
@@ -59,7 +59,7 @@ jobs:
           curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
           -H "Content-Type: application/json" \
           -d '{
-            "image": "taehun2/bustracker:${{ github.ref_name }}",
+            "image": "taehun2/bbb:${{ github.ref_name }}",
             "env": {
               "SPRING_PROFILES_ACTIVE": "prod",
               "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",

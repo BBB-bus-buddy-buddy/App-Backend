@@ -17,7 +17,7 @@ public class CorsConfig {
                         .allowedOriginPatterns("*")  // 모든 Origin 패턴 허용
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
-                        .allowCredentials(true);
+                        .allowCredentials(false);
             }
         };
     }
