@@ -1,4 +1,4 @@
-name: CI/CD
+name: Secure CI/CD
 
 on:
   push:
@@ -19,17 +19,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Debug build arguments
-        run: |
-          echo "SPRING_PROFILES_ACTIVE: prod"
-          echo "DATABASE_NAME is set: ${{ secrets.DATABASE_NAME != '' }}"
-          echo "MONGODB_URI is set: ${{ secrets.MONGODB_URI != '' }}"
-          echo "OAUTH_CLIENT_ID is set: ${{ secrets.OAUTH_CLIENT_ID != '' }}"
-          echo "OAUTH_SECRET_KEY is set: ${{ secrets.OAUTH_SECRET_KEY != '' }}"
-          echo "UNIV_API_KEY is set: ${{ secrets.UNIV_API_KEY != '' }}"
-          echo "KAKAO_REST_API_KEY is set: ${{ secrets.KAKAO_REST_API_KEY != '' }}"
-          echo "JWT_SECRET is set: ${{ secrets.JWT_SECRET != '' }}"
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -45,29 +34,37 @@ jobs:
             UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
             KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
-          outputs: type=docker,dest=/tmp/image.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Load image
+      - name: Prepare deployment data and signature
+        id: prepare
         run: |
-          docker load --input /tmp/image.tar
-          docker image ls -a
+          # JSON 데이터를 환경 변수로 설정
+          DEPLOY_JSON="{\"image\":\"taehun2/bbb:${{ github.ref_name }}\",\"env\":{\"SPRING_PROFILES_ACTIVE\":\"prod\",\"DATABASE_NAME\":\"${{ secrets.DATABASE_NAME }}\",\"MONGODB_URI\":\"${{ secrets.MONGODB_URI }}\",\"OAUTH_CLIENT_ID\":\"${{ secrets.OAUTH_CLIENT_ID }}\",\"OAUTH_SECRET_KEY\":\"${{ secrets.OAUTH_SECRET_KEY }}\",\"UNIV_API_KEY\":\"${{ secrets.UNIV_API_KEY }}\",\"KAKAO_REST_API_KEY\":\"${{ secrets.KAKAO_REST_API_KEY }}\",\"JWT_SECRET\":\"${{ secrets.JWT_SECRET }}\"}}"
+          
+          # JSON 데이터로부터 서명 생성
+          SIGNATURE=$(echo -n "$DEPLOY_JSON" | openssl dgst -sha256 -hmac "${{ secrets.WEBHOOK_SECRET }}" | cut -d' ' -f2)
+          
+          # 결과를 GitHub Actions 환경 변수로 저장
+          echo "deploy_json=$DEPLOY_JSON" >> $GITHUB_OUTPUT
+          echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
 
       - name: Trigger deployment
         run: |
-          curl -X POST ${{ secrets.OFFICE_PC_WEBHOOK_URL }} \
-          -H "Content-Type: application/json" \
-          -d '{
-            "image": "taehun2/bbb:${{ github.ref_name }}",
-            "env": {
-              "SPRING_PROFILES_ACTIVE": "prod",
-              "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
-              "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
-              "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
-              "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
-              "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
-              "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
-              "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
-            }
-          }'
+          # 허용된 POST 요청으로 푸시
+          curl -X POST "${{ secrets.OFFICE_PC_WEBHOOK_URL }}/deploy" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "image": "taehun2/bbb:${{ github.ref_name }}",
+              "env": {
+                "SPRING_PROFILES_ACTIVE": "prod",
+                "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
+                "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
+                "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
+                "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
+                "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
+                "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+              }
+            }'
