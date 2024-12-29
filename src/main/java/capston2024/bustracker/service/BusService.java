@@ -2,6 +2,7 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusRepository;
 import com.mongodb.DBRef;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,7 +31,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @AllArgsConstructor
 public class BusService {
-
+    private static final double STATION_RADIUS = 120.0; // 120미터 반경으로 직접 설정
     private final BusRepository busRepository;
     private final StationService stationService;
     private final MongoOperations mongoOperations;
@@ -204,121 +206,177 @@ public class BusService {
         return new BusUpdateDTO(busNumber, new GeoJsonPoint(longitude, latitude), timestamp, seats);
     }
 
-    @Scheduled(fixedRate = 5000)
-    public void flushLocationUpdates() {
-        List<BusUpdateDTO> updates;
-        synchronized (pendingUpdates) {
-            updates = new ArrayList<>(pendingUpdates.values());
-            pendingUpdates.clear();
-        }
-
-        for (BusUpdateDTO update : updates) {
-            try {
-                Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
-                Bus existingBus = mongoOperations.findOne(query, Bus.class);
-                int totalSeats = (existingBus != null)
-                        ? existingBus.getTotalSeats()
-                        : 40;  // 기본값
-                Update mongoUpdate = new Update()
-                        .set("location", update.getLocation())
-                        .set("timestamp", update.getTimestamp())
-                        .set("occupiedSeats", update.getSeats())
-                        .set("availableSeats", totalSeats-update.getSeats());
-
-                log.info("업데이트 쿼리: {}", mongoUpdate);
-
-                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "Bus");
-                log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
-                        update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
-
-                // 업데이트 후 문서 확인
-                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "Bus");
-                log.info("업데이트된 버스 정보: {}", updatedBus);
-
-            } catch (Exception e) {
-                log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
-            }
-        }
-
-        log.info("{} 개의 버스 위치와 좌석 정보가 업데이트되었습니다.", updates.size());
+//    @Scheduled(fixedRate = 5000)
+//    public void flushLocationUpdates() {
+//        List<BusUpdateDTO> updates;
+//        synchronized (pendingUpdates) {
+//            updates = new ArrayList<>(pendingUpdates.values());
+//            pendingUpdates.clear();
+//        }
+//
+//        for (BusUpdateDTO update : updates) {
+//            try {
+//                Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
+//                Bus existingBus = mongoOperations.findOne(query, Bus.class);
+//                int totalSeats = (existingBus != null)
+//                        ? existingBus.getTotalSeats()
+//                        : 40;  // 기본값
+//                Update mongoUpdate = new Update()
+//                        .set("location", update.getLocation())
+//                        .set("timestamp", update.getTimestamp())
+//                        .set("occupiedSeats", update.getSeats())
+//                        .set("availableSeats", totalSeats-update.getSeats());
+//
+//                log.info("업데이트 쿼리: {}", mongoUpdate);
+//
+//                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "Bus");
+//                log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
+//                        update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
+//
+//                // 업데이트 후 문서 확인
+//                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "Bus");
+//                log.info("업데이트된 버스 정보: {}", updatedBus);
+//
+//            } catch (Exception e) {
+//                log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
+//            }
+//        }
+//
+//        log.info("{} 개의 버스 위치와 좌석 정보가 업데이트되었습니다.", updates.size());
+//    }
+@Scheduled(fixedRate = 5000)
+public void flushLocationUpdates() {
+    List<BusUpdateDTO> updates;
+    synchronized (pendingUpdates) {
+        updates = new ArrayList<>(pendingUpdates.values());
+        pendingUpdates.clear();
     }
 
-    /**
-     * 웹 소켓에서 받아오는 서비스 - 버스 좌석 정보만
-     * @param csvData ( busNumber, location(lat, lst) )
-     * @return CompletableFuture.xFuture(e)
-     */
-    @Async
-    public CompletableFuture<Void> processBusSeatAsync(String csvData) {
-        return CompletableFuture.runAsync(() -> {
+    for (BusUpdateDTO update : updates) {
+        try {
+            Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
+            Bus existingBus = mongoOperations.findOne(query, Bus.class);
+
+            if (existingBus == null) {
+                log.warn("Bus not found: {}", update.getBusNumber());
+                continue;
+            }
+
+            int totalSeats = existingBus.getTotalSeats();
+
+            // 현재 위치와 가장 가까운 정류장 찾기
+            Bus.StationInfo nearestStation = findNearestStation(existingBus, update.getLocation());
+            log.info("로그용 nearestStation {}", nearestStation);
+
+            Update mongoUpdate = new Update()
+                    .set("location", update.getLocation())
+                    .set("timestamp", update.getTimestamp())
+                    .set("occupiedSeats", update.getSeats())
+                    .set("availableSeats", totalSeats - update.getSeats());
+
+            // 가까운 정류장이 있고, 이전 정류장과 다른 경우에만 업데이트
+            if (nearestStation != null &&
+                    (existingBus.getPrevStationId() == null ||
+                            !existingBus.getPrevStationId().equals(nearestStation.getStationRef().getId()))) {
+
+                mongoUpdate.set("prevStationId", nearestStation.getStationRef().getId())
+                        .set("lastStationTime", update.getTimestamp())
+                        .set("currentStationIdx", findStationIndex(existingBus, nearestStation));
+
+                log.info("버스 {} 정류장 업데이트: {}", update.getBusNumber(), nearestStation.getStationName());
+            }
+
+            UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "Bus");
+            log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
+                    update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
+
+            Bus updatedBus = mongoOperations.findOne(query, Bus.class, "Bus");
+            log.info("업데이트된 버스 정보: {}", updatedBus);
+
+        } catch (Exception e) {
+            log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
+        }
+    }
+
+    log.info("{} 개의 버스 위치와 정류장 정보가 업데이트되었습니다.", updates.size());
+}
+
+    private Bus.StationInfo findNearestStation(Bus bus, GeoJsonPoint newLocation) {
+        // 현재 버스의 순서(currentStationIdx) 주변의 정류장들만 확인
+        int startIdx = Math.max(0, bus.getPrevStationIdx() - 1);
+        int endIdx = Math.min(bus.getStations().size(), bus.getPrevStationIdx() + 2);
+
+        Bus.StationInfo nearestStation = null;
+        double minDistance = STATION_RADIUS;
+
+        for (int i = startIdx; i < endIdx; i++) {
+            Bus.StationInfo station = bus.getStations().get(i);
             try {
-                BusSeatUpdateDTO update = parseCsvToBusSeatUpdate(csvData);
-                log.info("새로운 버스 좌석 정보 업데이트 수신: {}", update);
-                pendingSeatUpdates.compute(update.getBusNumber(), (key, existing) -> {
-                    if (existing == null || update.getTimestamp().isAfter(existing.getTimestamp())) {
-                        log.info("버스 좌석 업데이트 대기열에 추가: {}", update);
-                        return update;
+                Station stationDetail = mongoOperations.findById(
+                        station.getStationRef().getId(),
+                        Station.class
+                );
+
+                if (stationDetail != null) {
+                    double distance = calculateDistance(
+                            newLocation.getX(), newLocation.getY(),
+                            stationDetail.getLocation().getX(), stationDetail.getLocation().getY()
+                    );
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestStation = station;
                     }
-                    return existing;
-                });
+                }
             } catch (Exception e) {
-                log.error("버스 좌석 처리 중 오류 발생: ", e);
-            }
-        });
-    }
-
-
-    private BusSeatUpdateDTO parseCsvToBusSeatUpdate(String csvData) {
-        String[] parts = csvData.split(",");
-        if (parts.length != 2) {
-            throw new IllegalArgumentException("CSV 형식이 알맞지 않습니다. 형식: 버스번호,좌석수");
-        }
-
-        String busNumber = parts[0];
-        int seats = Integer.parseInt(parts[1]);
-        Instant timestamp = Instant.now();
-
-        return new BusSeatUpdateDTO(busNumber, seats, timestamp);
-    }
-
-    @Scheduled(fixedRate = 5000)
-    public void flushSeatUpdates() {
-        List<BusSeatUpdateDTO> updates;
-        synchronized (pendingSeatUpdates) {
-            updates = new ArrayList<>(pendingSeatUpdates.values());
-            pendingSeatUpdates.clear();
-        }
-
-        for (BusSeatUpdateDTO update : updates) {
-            try {
-                Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber()));
-                Bus existingBus = mongoOperations.findOne(query, Bus.class);
-                int totalSeats = (existingBus != null)
-                        ? existingBus.getTotalSeats()
-                        : 40;  // 기본값
-                Update mongoUpdate = new Update()
-                        .set("timestamp", update.getTimestamp())
-                        .set("occupiedSeats", update.getSeats())
-                        .set("availableSeats", totalSeats-update.getSeats());
-
-                log.info("버스 좌석 업데이트 쿼리: {}", mongoUpdate);
-
-                UpdateResult result = mongoOperations.updateFirst(query, mongoUpdate, "Bus");
-                log.info("버스 {} 업데이트 결과: 일치 문서 {}, 수정된 문서 {}",
-                        update.getBusNumber(), result.getMatchedCount(), result.getModifiedCount());
-
-                // 업데이트 후 문서 확인
-                Bus updatedBus = mongoOperations.findOne(query, Bus.class, "Bus");
-                log.info("업데이트된 버스 정보: {}", updatedBus);
-
-            } catch (Exception e) {
-                log.error("버스 {} 업데이트 중 오류 발생: ", update.getBusNumber(), e);
+                log.error("정류장 정보 조회 중 오류: {}", station.getStationRef().getId(), e);
             }
         }
 
-        log.info("{} 개의 버스 위치와 좌석 정보가 업데이트되었습니다.", updates.size());
+        return nearestStation;
     }
 
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371000; // 지구의 반지름 (미터)
+
+        // 위도, 경도를 라디안으로 변환
+        double lat1Rad = Math.toRadians(lat1);
+        double lon1Rad = Math.toRadians(lon1);
+        double lat2Rad = Math.toRadians(lat2);
+        double lon2Rad = Math.toRadians(lon2);
+
+        // 위도, 경도 차이
+        double dLat = lat2Rad - lat1Rad;
+        double dLon = lon2Rad - lon1Rad;
+
+        // Haversine 공식
+        double a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+                        Math.sin(dLon/2) * Math.sin(dLon/2);
+
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        // 최종 거리 (미터 단위)
+        return R * c;
+    }
+
+    private int findStationIndex(Bus bus, Bus.StationInfo station) {
+        for (int i = 0; i < bus.getStations().size(); i++) {
+            if (bus.getStations().get(i).getStationRef().getId()
+                    .equals(station.getStationRef().getId())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    public LocationDTO getBusLocationByBusNumber(String busNumber) {
+        Bus bus = getBusByNumber(busNumber);
+        LocationDTO locationDTO = new LocationDTO();
+        locationDTO.setLatitude(bus.getLocation().getX());
+        locationDTO.setLongitude(bus.getLocation().getY());
+        locationDTO.setTimestamp(Instant.now());
+        return locationDTO;
+    }
 
     public BusSeatDTO getBusSeatsByBusNumber(String busNumber) {
         Bus bus = getBusByNumber(busNumber);
@@ -327,15 +385,6 @@ public class BusService {
         busSeatDTO.setOccupiedSeats(bus.getOccupiedSeats());
         busSeatDTO.setTotalSeats(bus.getTotalSeats());
         return busSeatDTO;
-    }
-
-    public LocationDTO getBusLocationByBusNumber(String busNumber) {
-        Bus bus = getBusByNumber(busNumber);
-        LocationDTO locationDTO = new LocationDTO();
-        locationDTO.setLatitude(bus.getLocation().getX());
-        locationDTO.setLongitude(bus.getLocation().getY());
-        locationDTO.setTimestamp(Instant.now());
-        return locationDTO;
     }
 }
 
