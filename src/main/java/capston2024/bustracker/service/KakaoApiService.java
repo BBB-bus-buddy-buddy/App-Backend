@@ -1,20 +1,19 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.ArrivalTimeRequestDTO;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import capston2024.bustracker.config.dto.*;
+import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Station;
+import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.repository.BusRepository;
+import capston2024.bustracker.repository.StationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 // API 문서: https://developers.kakaomobility.com/docs/navi-api/directions/
 @Service
@@ -25,7 +24,9 @@ public class KakaoApiService {
     private String REST_API_KEY;
 
     @Autowired
-    private ObjectMapper objectMapper;  // ObjectMapper 주입
+    private BusRepository busRepository;
+    @Autowired
+    private StationRepository stationRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -36,7 +37,7 @@ public class KakaoApiService {
      * @param destination
      * @return
      */
-    public String getArrivalTime(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
+    public String getSingleWaysTimeEstimate(ArrivalTimeRequestDTO origin, ArrivalTimeRequestDTO destination) {
         String url = "https://apis-navi.kakaomobility.com/v1/directions"
                 + "?origin=" + origin.getX() + "," + origin.getY()
                 + "&destination=" + destination.getX() + "," + destination.getY()
@@ -76,60 +77,115 @@ public class KakaoApiService {
         return null; // 도착 시간이 없을 때 null 반환
     }
 
-    public String getMultiArrivalTime(Map<String, Object> request) throws JsonProcessingException {
-        // 설정된 헤더에 API 키 추가
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "KakaoAK " + REST_API_KEY);
-        headers.set("Content-Type", "application/json");
+    /**
+     * 다중 경유지를 포함한 남은시간 계산 API
+     * @param busId
+     * @param stationId
+     * @return
+     */
+    public BusTimeEstimateResponse getMultiWaysTimeEstimate(String busId, String stationId) {
+        Bus bus = busRepository.findById(busId)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 버스 입니다: " + busId));
 
-        // 요청 본문
-        Map<String, Object> body = new HashMap<>();
-        body.put("origin", request.get("origin"));
-        body.put("destination", request.get("destination"));
-        body.put("waypoints", request.get("waypoints"));
-        body.put("priority", "RECOMMEND");
-        body.put("car_fuel", "GASOLINE");
-        body.put("car_hipass", false);
-        body.put("alternatives", false);
-        body.put("road_details", false);
+        Station targetStation = stationRepository.findById(stationId)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 정류장 입니다: " + stationId));
 
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
-
-        // API 호출
-        ResponseEntity<String> response = restTemplate.exchange(
-                "https://apis-navi.kakaomobility.com/v1/waypoints/directions",
-                HttpMethod.POST,
-                entity,
-                String.class
-        );
-
-        String responseBody = response.getBody();
-
-        // 응답에서 경로 정보 추출 및 총 소요 시간 계산
-        ObjectMapper objectMapper = new ObjectMapper();
-        Map<String, Object> resultMap = objectMapper.readValue(responseBody, Map.class);
-
-        int totalDuration = 0; // 총 소요 시간 (초 단위)
-
-        if (resultMap != null && resultMap.containsKey("routes")) {
-            List<Map<String, Object>> routes = (List<Map<String, Object>>) resultMap.get("routes");
-            if (!routes.isEmpty()) {
-                // 첫 번째 경로의 summary에서 소요 시간 추출
-                Map<String, Object> summary = (Map<String, Object>) routes.get(0).get("summary");
-                totalDuration = (Integer) summary.get("duration");
-            }
-        } else {
-            log.error("경로를 찾을 수 없습니다.");
-            return "경로를 찾을 수 없습니다.";
+        // 이미 지난 정류장인지 확인 (현재(최근) 인덱스보다 이전 인덱스의 정류장이면 이미 지난 것)
+        int targetIndex = findStationIndex(bus, targetStation.getId());
+        log.info("targetIdx : {}", targetIndex);
+        log.info("prevStationIdx : {}", bus.getPrevStationIdx());
+        if (targetIndex <= bus.getPrevStationIdx()) {
+            return BusTimeEstimateResponse.builder()
+                    .estimatedTime("--분 --초")
+                    .waypoints(Collections.emptyList())
+                    .build();
         }
 
-        // 시, 분, 초 단위로 변환
-        int hours = totalDuration / 3600;
-        int minutes = (totalDuration % 3600) / 60;
-        int seconds = totalDuration % 60;
+        // 현재 정류장 다음부터 목표 정류장 전까지의 정류장들을 경유지로 추출
+        List<Station> waypoints = extractWaypoints(bus, targetIndex);
+        log.info("waypoints : {}", waypoints);
 
-        String formattedTime = String.format("%d시간 %d분 %d초", hours, minutes, seconds);
-        log.info("총 소요 시간: {}", formattedTime);
-        return formattedTime;
+        // 카카오 모빌리티 API 호출
+        KakaoDirectionsResponse response = requestRouteEstimate(bus, targetStation, waypoints);
+        log.info("response : {}", response);
+
+        return BusTimeEstimateResponse.builder()
+                .estimatedTime(formatDuration(response.getDuration()))
+                .waypoints(waypoints.stream().map(Station::getName).collect(Collectors.toList()))
+                .build();
+    }
+
+    private int findStationIndex(Bus bus, String stationId) {
+        for (int i = 0; i < bus.getStations().size(); i++) {
+            if (bus.getStations().get(i).getStationRef().getId().equals(stationId)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("해당 정류장은 버스의 경유 정류장에 포함되지 않습니다: " + stationId);
+    }
+
+    private List<Station> extractWaypoints(Bus bus, int targetIndex) {
+        List<Station> waypoints = new ArrayList<>();
+
+        // 현재 정류장 다음부터 목표 정류장 전까지의 정류장들만 추출
+        for (int i = bus.getPrevStationIdx() + 1; i < targetIndex; i++) {
+            Bus.StationInfo station = bus.getStations().get(i);
+            Station stationInfo = stationRepository.findById((String) station.getStationRef().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "정류장을 찾을 수 없습니다: " + station.getStationRef().getId()));
+            waypoints.add(stationInfo);
+        }
+
+        return waypoints;
+    }
+    private KakaoDirectionsResponse requestRouteEstimate(Bus bus, Station targetStation,
+                                                         List<Station> waypoints) {
+        KakaoDirectionsRequest request = KakaoDirectionsRequest.builder()
+                .origin(new KakaoPoint(
+                        bus.getLocation().getCoordinates().get(1),  // longitude
+                        bus.getLocation().getCoordinates().get(0))) // latitude
+                .destination(new KakaoPoint(
+                        targetStation.getLocation().getCoordinates().get(1),  // longitude
+                        targetStation.getLocation().getCoordinates().get(0))) // latitude
+                .waypoints(waypoints.stream()
+                        .map(station -> new KakaoPoint(
+                                station.getLocation().getCoordinates().get(1),  // longitude
+                                station.getLocation().getCoordinates().get(0))) // latitude
+                        .collect(Collectors.toList()))
+                .priority("RECOMMEND")
+                .build();
+
+        return callKakaoMobilityAPI(request);
+    }
+
+    private KakaoDirectionsResponse callKakaoMobilityAPI(KakaoDirectionsRequest request) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "KakaoAK " + REST_API_KEY);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<KakaoDirectionsRequest> entity = new HttpEntity<>(request, headers);
+
+            ResponseEntity<KakaoDirectionsResponse> response = restTemplate.exchange(
+                    "https://apis-navi.kakaomobility.com/v1/waypoints/directions",
+                    HttpMethod.POST,
+                    entity,
+                    KakaoDirectionsResponse.class
+            );
+
+            if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null) {
+                throw new RuntimeException("카카오 API에서 정보를 얻지 못하였습니다");
+            }
+            log.info("KAKAO API response body : {}", response.getBody());
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("카카오 API 호출 에러", e);
+            throw new RuntimeException("남은 시간 계산에 실패하였습니다 : ", e);
+        }
+    }
+    private String formatDuration(int seconds) {
+        int minutes = seconds / 60;
+        int remainingSeconds = seconds % 60;
+        return String.format("%d분 %d초", minutes, remainingSeconds);
     }
 }

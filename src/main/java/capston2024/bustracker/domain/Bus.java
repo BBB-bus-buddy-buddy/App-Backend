@@ -8,6 +8,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Document(collection = "Bus")
@@ -27,6 +28,10 @@ public class Bus {
     private GeoJsonPoint location; // 좌표 정보 (GeoJSON 형식)
     private List<StationInfo> stations; // 버스의 노선(정류장들의 DBRef)
     private Instant timestamp; // 위치 정보 최신화
+    // 추가되는 필드들
+    private String prevStationId;  // 현재/마지막으로 지난 정류장 ID
+    private Instant lastStationTime;  // 마지막 정류장 통과 시간
+    private int prevStationIdx;  // 현재 정류장의 순서 (stations 리스트상의 인덱스)
     @Override
     public String toString() {
         return "Bus{" +
