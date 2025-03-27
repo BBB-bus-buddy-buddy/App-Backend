@@ -25,7 +25,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final TokenService tokenService;
 
     // 앱 스킴 URL
-    private static final String APP_SCHEME_URI = "org.reactjs.native.example.capstonBBBBNative://oauth2callback";
+    private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.capstonBBBBNative://oauth2callback";
+    private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
     private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L;
 
     @Override
@@ -50,14 +51,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 tokenProvider.generateRefreshToken(authentication, accessToken);
             }
 
-
-            // URL 인코딩된 토큰을 사용하여 리다이렉트 URL 생성
-            String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
-            String redirectUrl = UriComponentsBuilder
-                    .fromUriString(APP_SCHEME_URI)
-                    .queryParam("token", encodedToken)
-                    .build(false)  // URL 인코딩 비활성화 (이미 인코딩했으므로)
-                    .toUriString();
+            // 디바이스 타입 감지
+            String userAgent = request.getHeader("User-Agent");
+            String redirectUrl = determineRedirectUrl(userAgent, accessToken);
 
             // CORS 헤더 추가
             response.setHeader("Access-Control-Allow-Origin", "*");
@@ -74,5 +70,33 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         }
     }
 
-    // determineTargetUrl 메서드는 이제 필요 없으므로 제거
+    /**
+     * User-Agent 헤더를 분석하여 디바이스 타입에 맞는 리다이렉트 URL을 결정합니다.
+     */
+    private String determineRedirectUrl(String userAgent, String accessToken) throws IOException {
+        String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
+        String appSchemeUri;
+
+        // User-Agent 문자열에서 디바이스 타입 감지
+        if (userAgent != null) {
+            if (userAgent.contains("Android")) {
+                appSchemeUri = ANDROID_APP_SCHEME_URI;
+            } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
+                appSchemeUri = IOS_APP_SCHEME_URI;
+            } else {
+                // 기본값으로 iOS 스킴 사용 (또는 필요에 따라 변경)
+                appSchemeUri = IOS_APP_SCHEME_URI;
+            }
+        } else {
+            // User-Agent가 null인 경우 기본값 사용
+            appSchemeUri = IOS_APP_SCHEME_URI;
+        }
+
+        // 리다이렉트 URL 생성
+        return UriComponentsBuilder
+                .fromUriString(appSchemeUri)
+                .queryParam("token", encodedToken)
+                .build(false)  // URL 인코딩 비활성화 (이미 인코딩했으므로)
+                .toUriString();
+    }
 }
