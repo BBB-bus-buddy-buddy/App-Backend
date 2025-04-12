@@ -1,23 +1,18 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.SchoolAuthRequestDTO;
-import capston2024.bustracker.exception.AdditionalAuthenticationFailedException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
-import io.jsonwebtoken.io.IOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.checkerframework.checker.units.qual.A;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
@@ -49,6 +44,12 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(request, response);
         return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
+    }
+
+    @PostMapping("/rankUp")
+    public ResponseEntity<ApiResponse<Boolean>> rankUpUser(@AuthenticationPrincipal OAuth2User principal, @RequestBody String code){
+        boolean isRankUp = authService.rankUpGuestToUser(principal, code);
+        return ResponseEntity.ok(new ApiResponse<>(isRankUp, "성공적으로 조직 등록이 완료되었습니다."));
     }
 
     @ExceptionHandler(UnauthorizedException.class)

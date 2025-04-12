@@ -4,11 +4,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
-public class SchoolIdGenerator {
+public class OrganizationIdGenerator {
 
-    public static String generateSchoolId(String schoolName) {
+    public static String generateOrganizationId(String organizationName) {
         // 1. 공백 제거 및 소문자 변환
-        String trimmedName = schoolName.trim().toLowerCase();
+        String trimmedName = organizationName.trim().toLowerCase();
 
         // 2. SHA-256 해시 생성
         String hashedName = hashString(trimmedName);
