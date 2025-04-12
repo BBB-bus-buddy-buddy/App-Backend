@@ -26,7 +26,6 @@ public class StationService {
     private final StationRepository stationRepository;
     private final BusRepository busRepository;
     private final AuthService authService;
-    private final SchoolService schoolService;
 
 
     // 정류장 이름으로 검색

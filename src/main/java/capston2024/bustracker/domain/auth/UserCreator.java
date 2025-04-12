@@ -22,7 +22,6 @@ public class UserCreator {
         return User.builder()
                 .name(attributes.getName())
                 .email(attributes.getEmail())
-                .picture(attributes.getPicture())
                 .myStations(list)
                 .role(Role.GUEST)
                 .build();

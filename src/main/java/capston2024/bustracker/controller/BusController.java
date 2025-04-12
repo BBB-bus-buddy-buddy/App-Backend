@@ -8,7 +8,6 @@ import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.BusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
