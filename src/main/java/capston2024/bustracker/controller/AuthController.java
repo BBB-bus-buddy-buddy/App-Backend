@@ -46,8 +46,8 @@ public class AuthController {
         return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
     }
 
-    @GetMapping("/rankUp/{code}")
-    public ResponseEntity<ApiResponse<Boolean>> rankUpUser(@AuthenticationPrincipal OAuth2User principal, @PathVariable String code){
+    @PostMapping("/rankUp")
+    public ResponseEntity<ApiResponse<Boolean>> rankUpUser(@AuthenticationPrincipal OAuth2User principal, @RequestBody String code){
         boolean isRankUp = authService.rankUpGuestToUser(principal, code);
         return ResponseEntity.ok(new ApiResponse<>(isRankUp, "성공적으로 조직 등록이 완료되었습니다."));
     }
