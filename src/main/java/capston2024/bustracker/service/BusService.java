@@ -1,3 +1,4 @@
+
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
@@ -7,13 +8,13 @@ import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.utils.BusNumberGenerator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
-import capston2024.bustracker.handler.BusPassengerWebSocketHandler;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.RouteRepository;
 import capston2024.bustracker.repository.StationRepository;
 import com.mongodb.DBRef;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -30,7 +31,6 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class BusService {
     private static final double STATION_RADIUS = 120.0; // 120미터 반경으로 직접 설정
 
@@ -38,11 +38,48 @@ public class BusService {
     private final RouteRepository routeRepository;
     private final StationRepository stationRepository;
     private final MongoOperations mongoOperations;
-    private final BusPassengerWebSocketHandler busPassengerWebSocketHandler;
     private final BusNumberGenerator busNumberGenerator;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 버스 위치 업데이트 큐
     private final Map<String, BusLocationUpdateDTO> pendingLocationUpdates = new ConcurrentHashMap<>();
+
+    @Autowired
+    public BusService(
+            BusRepository busRepository,
+            RouteRepository routeRepository,
+            StationRepository stationRepository,
+            MongoOperations mongoOperations,
+            BusNumberGenerator busNumberGenerator,
+            ApplicationEventPublisher eventPublisher) {
+        this.busRepository = busRepository;
+        this.routeRepository = routeRepository;
+        this.stationRepository = stationRepository;
+        this.mongoOperations = mongoOperations;
+        this.busNumberGenerator = busNumberGenerator;
+        this.eventPublisher = eventPublisher;
+    }
+
+    /**
+     * 버스 상태 업데이트 이벤트
+     */
+    public static class BusStatusUpdateEvent {
+        private final String organizationId;
+        private final BusStatusDTO busStatus;
+
+        public BusStatusUpdateEvent(String organizationId, BusStatusDTO busStatus) {
+            this.organizationId = organizationId;
+            this.busStatus = busStatus;
+        }
+
+        public String getOrganizationId() {
+            return organizationId;
+        }
+
+        public BusStatusDTO getBusStatus() {
+            return busStatus;
+        }
+    }
 
     /**
      * 버스 등록
@@ -98,6 +135,9 @@ public class BusService {
         busRepository.save(bus);
 
         log.info("새로운 버스가 등록되었습니다: ID={}, 번호={}, 조직={}", bus.getId(), busNumber, organizationId);
+
+        // 버스 등록 후 상태 업데이트 이벤트 발생
+        broadcastBusStatusUpdate(bus);
 
         return busNumber;
     }
@@ -177,64 +217,16 @@ public class BusService {
      * 버스 번호와 조직으로 특정 버스 조회
      */
     public Bus getBusByNumberAndOrganization(String busNumber, String organizationId) {
-        Query query = new Query(Criteria.where("busNumber").is(busNumber)
-                .and("organizationId").is(organizationId));
-
-        Bus bus = mongoOperations.findOne(query, Bus.class);
-        if (bus == null) {
-            throw new ResourceNotFoundException(
-                    String.format("버스를 찾을 수 없습니다: 번호=%s, 조직=%s", busNumber, organizationId));
-        }
-
-        return bus;
+        return busRepository.findByBusNumberAndOrganizationId(busNumber, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format("버스를 찾을 수 없습니다: 번호=%s, 조직=%s", busNumber, organizationId)));
     }
 
     /**
      * 조직 ID로 모든 버스 조회
      */
     public List<Bus> getAllBusesByOrganizationId(String organizationId) {
-        Query query = new Query(Criteria.where("organizationId").is(organizationId));
-        return mongoOperations.find(query, Bus.class);
-    }
-
-
-    /**
-     * 특정 정류장을 경유하는 조직의 모든 버스 조회
-     * @param stationId 정류장 ID
-     * @param organizationId 조직 ID
-     * @return 버스 상태 DTO 목록
-     */
-    public List<BusStatusDTO> getBusesByStationAndOrganization(String stationId, String organizationId) {
-        log.info("특정 정류장을 경유하는 버스 조회 - 정류장 ID: {}, 조직 ID: {}", stationId, organizationId);
-
-        // 조직의 모든 버스 조회
-        List<Bus> organizationBuses = getAllBusesByOrganizationId(organizationId);
-        List<BusStatusDTO> result = new ArrayList<>();
-
-        // 각 버스에 대해 라우트를 검사하여 해당 정류장을 경유하는지 확인
-        for (Bus bus : organizationBuses) {
-            if (bus.getRouteId() == null) continue;
-
-            String routeId = bus.getRouteId().getId().toString();
-            Route route = routeRepository.findById(routeId).orElse(null);
-
-            if (route != null && route.getStations() != null) {
-                // 라우트의 모든 정류장을 확인
-                boolean containsStation = route.getStations().stream()
-                        .anyMatch(routeStation -> {
-                            String stationRefId = routeStation.getStationId().getId().toString();
-                            return stationRefId.equals(stationId);
-                        });
-
-                // 해당 정류장을 경유하는 경우 결과에 추가
-                if (containsStation) {
-                    result.add(convertToStatusDTO(bus));
-                }
-            }
-        }
-
-        log.info("정류장 {} 경유 버스 {} 대 조회됨", stationId, result.size());
-        return result;
+        return busRepository.findByOrganizationId(organizationId);
     }
 
     /**
@@ -298,6 +290,42 @@ public class BusService {
     }
 
     /**
+     * 특정 정류장을 경유하는 조직의 모든 버스 조회
+     */
+    public List<BusStatusDTO> getBusesByStationAndOrganization(String stationId, String organizationId) {
+        log.info("특정 정류장을 경유하는 버스 조회 - 정류장 ID: {}, 조직 ID: {}", stationId, organizationId);
+
+        // 조직의 모든 버스 조회
+        List<Bus> organizationBuses = getAllBusesByOrganizationId(organizationId);
+        List<BusStatusDTO> result = new ArrayList<>();
+
+        // 각 버스에 대해 라우트를 검사하여 해당 정류장을 경유하는지 확인
+        for (Bus bus : organizationBuses) {
+            if (bus.getRouteId() == null) continue;
+
+            String routeId = bus.getRouteId().getId().toString();
+            Route route = routeRepository.findById(routeId).orElse(null);
+
+            if (route != null && route.getStations() != null) {
+                // 라우트의 모든 정류장을 확인
+                boolean containsStation = route.getStations().stream()
+                        .anyMatch(routeStation -> {
+                            String stationRefId = routeStation.getStationId().getId().toString();
+                            return stationRefId.equals(stationId);
+                        });
+
+                // 해당 정류장을 경유하는 경우 결과에 추가
+                if (containsStation) {
+                    result.add(convertToStatusDTO(bus));
+                }
+            }
+        }
+
+        log.info("정류장 {} 경유 버스 {} 대 조회됨", stationId, result.size());
+        return result;
+    }
+
+    /**
      * 버스 객체를 StatusDTO로 변환
      */
     private BusStatusDTO convertToStatusDTO(Bus bus) {
@@ -350,7 +378,7 @@ public class BusService {
      */
     private void broadcastBusStatusUpdate(Bus bus) {
         BusStatusDTO statusDTO = convertToStatusDTO(bus);
-        busPassengerWebSocketHandler.broadcastBusStatus(bus.getOrganizationId(), statusDTO);
+        eventPublisher.publishEvent(new BusStatusUpdateEvent(bus.getOrganizationId(), statusDTO));
     }
 
     /**

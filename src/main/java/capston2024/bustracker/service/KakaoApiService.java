@@ -162,15 +162,15 @@ public class KakaoApiService {
     private KakaoDirectionsResponse requestRouteEstimate(Bus bus, Station targetStation, List<Station> waypoints) {
         KakaoDirectionsRequest request = KakaoDirectionsRequest.builder()
                 .origin(new KakaoPoint(
-                        bus.getLocation().getX(), // longitude
-                        bus.getLocation().getY())) // latitude
+                        bus.getLocation().getY(), // longitude
+                        bus.getLocation().getX())) // latitude
                 .destination(new KakaoPoint(
-                        targetStation.getLocation().getX(), // longitude
-                        targetStation.getLocation().getY())) // latitude
+                        targetStation.getLocation().getY(), // longitude
+                        targetStation.getLocation().getX())) // latitude
                 .waypoints(waypoints.stream()
                         .map(station -> new KakaoPoint(
-                                station.getLocation().getX(), // longitude
-                                station.getLocation().getY())) // latitude
+                                station.getLocation().getY(), // longitude
+                                station.getLocation().getX())) // latitude
                         .collect(Collectors.toList()))
                 .priority("RECOMMEND")
                 .build();

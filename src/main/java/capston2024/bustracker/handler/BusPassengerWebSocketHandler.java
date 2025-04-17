@@ -4,8 +4,9 @@ import capston2024.bustracker.config.dto.BusBoardingDTO;
 import capston2024.bustracker.config.dto.BusStatusDTO;
 import capston2024.bustracker.service.BusService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -22,16 +23,28 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
 
-    private final BusService busService;
     private final ObjectMapper objectMapper;
+
+    // ApplicationContext를 사용하여 지연 초기화
+    private final ApplicationContext applicationContext;
 
     // 조직별 승객 세션 관리 (organizationId -> Set<WebSocketSession>)
     private final Map<String, Set<WebSocketSession>> organizationSessions = new ConcurrentHashMap<>();
     // 세션 역매핑을 위한 맵 (sessionId -> organizationId)
     private final Map<String, String> sessionToOrgMap = new ConcurrentHashMap<>();
+
+    @Autowired
+    public BusPassengerWebSocketHandler(ObjectMapper objectMapper, ApplicationContext applicationContext) {
+        this.objectMapper = objectMapper;
+        this.applicationContext = applicationContext;
+    }
+
+    // 지연 초기화를 통해 BusService 얻기
+    private BusService getBusService() {
+        return applicationContext.getBean(BusService.class);
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -133,7 +146,7 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
         String organizationId = (String) data.get("organizationId");
 
         // 해당 조직의 모든 버스 상태 즉시 전송
-        busService.getAllBusStatusByOrganizationId(organizationId).forEach(busStatus -> {
+        getBusService().getAllBusStatusByOrganizationId(organizationId).forEach(busStatus -> {
             try {
                 Map<String, Object> message = Map.of(
                         "type", "busUpdate",
@@ -162,7 +175,7 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
             boardingDTO.setAction(BusBoardingDTO.BoardingAction.valueOf((String) boardingData.get("action")));
             boardingDTO.setTimestamp(System.currentTimeMillis());
 
-            boolean success = busService.processBusBoarding(boardingDTO);
+            boolean success = getBusService().processBusBoarding(boardingDTO);
 
             if (success) {
                 sendSuccessMessage(session, boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD ?
