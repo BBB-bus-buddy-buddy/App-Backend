@@ -10,6 +10,7 @@ import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -21,6 +22,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
     private final UserRepository userRepository;
     private final OrganizationService organizationService;
@@ -45,6 +47,13 @@ public class AuthService {
         if (user == null) {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
+
+        // 이미 USER 권한을 갖고 있는 경우
+        if (user.getRole() == Role.USER || user.getRole() == Role.ADMIN) {
+            log.info("이미 인증된 사용자입니다: {}", user.getEmail());
+            return true;
+        }
+
         Organization organization = organizationService.getOrganization(organizationId);
         user.updateRole(Role.USER);
         user.setOrganizationId(organization.getId());

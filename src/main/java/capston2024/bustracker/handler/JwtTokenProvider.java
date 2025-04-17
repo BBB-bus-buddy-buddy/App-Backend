@@ -1,8 +1,11 @@
 package capston2024.bustracker.handler;
 
+import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.TokenInfo;
 import capston2024.bustracker.exception.TokenException;
+import capston2024.bustracker.repository.UserRepository;
 import capston2024.bustracker.service.TokenService;
+import capston2024.bustracker.service.UserService;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -28,15 +31,19 @@ import static capston2024.bustracker.exception.ErrorCode.INVALID_TOKEN;
 public class JwtTokenProvider {
     public static final long ACCESS_TOKEN_EXPIRE_TIME = 1000 * 60 * 60 * 24 * 30L; // 30일
     public static final long REFRESH_TOKEN_EXPIRE_TIME = 1000 * 60 * 60 * 24 * 90L; // 90일
-    public JwtTokenProvider(@Value("${JWT_SECRET}") String key, TokenService tokenService) {
+
+    public JwtTokenProvider(@Value("${JWT_SECRET}") String key, TokenService tokenService, UserService userService, UserRepository userRepository) {
         this.key = key;
         this.tokenService = tokenService;
+        this.userRepository = userRepository;
     }
+
     private final String key;
     private SecretKey secretKey;
     // 모바일 앱을 위한 토큰 만료 시간 조정
     private static final String KEY_ROLE = "role";
     private final TokenService tokenService;
+    private final UserRepository userRepository;
 
     @PostConstruct
     private void setSecretKey() {
@@ -64,14 +71,25 @@ public class JwtTokenProvider {
                 .collect(Collectors.joining(","));
 
         String email = null;
+        String organizationId = null;
+
         if (authentication.getPrincipal() instanceof OAuth2User oAuth2User) {
-            email = (String) oAuth2User.getAttributes().get("email"); // "email" 클레임 추가
+            email = (String) oAuth2User.getAttributes().get("email");
+
+            // User 객체를 통해 organizationId 가져오기
+            if (email != null) {
+                User user = userRepository.findByEmail(email).orElse(null);
+                if (user != null) {
+                    organizationId = user.getOrganizationId();
+                }
+            }
         }
 
         return Jwts.builder()
                 .setSubject(authentication.getName())
                 .claim(KEY_ROLE, authorities)
                 .claim("email", email)                  // 이메일 클레임 추가
+                .claim("organizationId", organizationId) // 조직 ID 클레임 추가
                 .setIssuedAt(now)
                 .setExpiration(expiredDate)
                 .signWith(secretKey, SignatureAlgorithm.HS512)

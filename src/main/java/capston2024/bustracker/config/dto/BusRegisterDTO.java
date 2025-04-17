@@ -1,15 +1,11 @@
 package capston2024.bustracker.config.dto;
 
-import com.mongodb.DBRef;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.List;
 
 @Getter
 @Setter
 public class BusRegisterDTO {
-    private String busNumber;         // 버스 번호
-    private List<String> stationNames; // 버스 노선에 포함될 정류장 이름 리스트
-    private int totalSeats;
+    private String routeId;           // 라우트 ID (이전 stationNames 대신)
+    private int totalSeats;           // 총 좌석 수
 }
