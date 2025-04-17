@@ -42,13 +42,18 @@ public class UserController {
     }
 
 
-
+    /**
+     * 내 정류장 추가
+     * @param request - stationId
+     * @param principal
+     * @return
+     */
     // 내 정류장 추가
     @PostMapping("/my-station")
     public ResponseEntity<ApiResponse<Boolean>> addMyStation(@RequestBody MyStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
-            log.warn("No authenticated user found");
+            log.warn("인증된 사용자를 찾을 수 없음");
             throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
         }
         Map<String, Object> obj = authService.getUserDetails(principal);

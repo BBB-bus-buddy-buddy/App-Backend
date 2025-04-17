@@ -10,6 +10,8 @@ public interface StationRepository extends MongoRepository<Station, String> {
     // 특정 정류장을 정류장 이름으로 조회
     Optional<Station> findByName(String name);
 
+    List<Station> findAllByOrganizationId(String organizationId);
+
     // 특정 이름이 포함된 정류장 조회
-    List<Station> findByNameContainingIgnoreCase(String stationName);
+    List<Station> findByNameAndOrganizationId(String stationName, String organizationId);
 }
