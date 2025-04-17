@@ -157,18 +157,18 @@ public class BusService {
      * 버스 수정
      */
     @Transactional
-    public boolean modifyBus(BusDTO busDTO, String organizationId) {
-        if (busDTO.getTotalSeats() < 0) {
+    public boolean modifyBus(BusModifyDTO busModifyDTO, String organizationId) {
+        if (busModifyDTO.getTotalSeats() < 0) {
             throw new IllegalArgumentException("전체 좌석 수는 0보다 작을 수 없습니다.");
         }
 
         // 버스 존재 확인
-        Bus bus = getBusByNumberAndOrganization(busDTO.getBusNumber(), organizationId);
+        Bus bus = getBusByNumberAndOrganization(busModifyDTO.getBusNumber(), organizationId);
 
         // 라우트 변경이 있는 경우
-        if (busDTO.getRouteId() != null && !busDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
-            Route route = routeRepository.findById(busDTO.getRouteId())
-                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busDTO.getRouteId()));
+        if (busModifyDTO.getRouteId() != null && !busModifyDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
+            Route route = routeRepository.findById(busModifyDTO.getRouteId())
+                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busModifyDTO.getRouteId()));
 
             // 같은 조직의 라우트인지 확인
             if (!route.getOrganizationId().equals(organizationId)) {
@@ -184,17 +184,17 @@ public class BusService {
         }
 
         // 좌석 정보 업데이트
-        bus.setTotalSeats(busDTO.getTotalSeats());
+        bus.setTotalSeats(busModifyDTO.getTotalSeats());
         int occupiedSeats = bus.getOccupiedSeats();
 
-        if (occupiedSeats > busDTO.getTotalSeats()) {
+        if (occupiedSeats > busModifyDTO.getTotalSeats()) {
             log.warn("전체 좌석 수({})가 현재 사용 중인 좌석 수({})보다 적으므로 자동 조정됩니다.",
-                    busDTO.getTotalSeats(), occupiedSeats);
-            occupiedSeats = busDTO.getTotalSeats();
+                    busModifyDTO.getTotalSeats(), occupiedSeats);
+            occupiedSeats = busModifyDTO.getTotalSeats();
             bus.setOccupiedSeats(occupiedSeats);
         }
 
-        bus.setAvailableSeats(busDTO.getTotalSeats() - occupiedSeats);
+        bus.setAvailableSeats(busModifyDTO.getTotalSeats() - occupiedSeats);
 
         busRepository.save(bus);
 

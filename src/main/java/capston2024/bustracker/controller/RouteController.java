@@ -38,6 +38,7 @@ public class RouteController {
             @RequestParam(required = false) String name) {
 
         if (principal == null) {
+            log.warn("No authenticated user found");
             throw new UnauthorizedException("인증된 사용자만 라우트를 조회할 수 있습니다.");
         }
 

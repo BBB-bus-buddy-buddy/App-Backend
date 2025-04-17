@@ -87,7 +87,7 @@ public class BusController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusDTO busDTO) {
+            @RequestBody BusModifyDTO busModifyDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 수정할 수 있습니다.");
@@ -100,12 +100,12 @@ public class BusController {
             throw new BusinessException("조직에 속하지 않은 사용자는 버스를 수정할 수 없습니다.");
         }
 
-        if (busDTO.getBusNumber() == null || busDTO.getBusNumber().trim().isEmpty()) {
+        if (busModifyDTO.getBusNumber() == null || busModifyDTO.getBusNumber().trim().isEmpty()) {
             throw new BusinessException("버스 번호는 필수입니다.");
         }
 
-        log.info("버스 수정 요청 - 버스 번호: {}, 조직: {}", busDTO.getBusNumber(), organizationId);
-        boolean result = busService.modifyBus(busDTO, organizationId);
+        log.info("버스 수정 요청 - 버스 번호: {}, 조직: {}", busModifyDTO.getBusNumber(), organizationId);
+        boolean result = busService.modifyBus(busModifyDTO, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(result, "버스가 성공적으로 수정되었습니다."));
     }

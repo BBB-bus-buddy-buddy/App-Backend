@@ -1,5 +1,6 @@
 package capston2024.bustracker.service;
 
+import capston2024.bustracker.config.dto.RouteDTO;
 import capston2024.bustracker.config.dto.StationRequestDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.Route;
@@ -17,9 +18,11 @@ import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -31,9 +34,13 @@ public class StationService {
 
 
     // 정류장 이름으로 검색
-    public List<Station> getStationName(String stationName, String organizationId) {
+    public List<Station> searchStationsByNameAndOrganizationId(String stationName, String organizationId) {
         log.info("{}의 조직 id로 {} 정류장을 찾는 중입니다....", organizationId, stationName);
-        return stationRepository.findByNameAndOrganizationId(stationName, organizationId);
+        if (organizationId == null || organizationId.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED, "조직 ID가 필요합니다.");
+        }
+
+        return stationRepository.findByNameContainingIgnoreCaseAndOrganizationId(stationName, organizationId);
     }
 
     // 모든 정류장 조회
@@ -54,7 +61,7 @@ public class StationService {
         log.info("새로운 정류장 추가 중: {}", createStationDTO.getName());
 
         // 중복된 정류장이 있는지 확인
-        if (stationRepository.findByName(createStationDTO.getName()).isPresent()) {
+        if (stationRepository.findByNameAndOrganizationId(createStationDTO.getName(), organizationId).isPresent()) {
             throw new BusinessException(ErrorCode.DUPLICATE_ENTITY, "이미 존재하는 정류장입니다.");
         }
 
@@ -130,22 +137,5 @@ public class StationService {
         // 정류장 삭제
         stationRepository.delete(station);
         log.info("정류장 {}가 삭제되었습니다.", id);
-    }
-
-    // 정류장 이름 목록을 받아 유효성 검사
-    public boolean isValidStationNames(List<String> stationNames) {
-        log.info("정류장 이름 목록의 유효성 검사 중...");
-
-        for (String stationName : stationNames) {
-            // 정류장 이름을 통해 해당 정류장 객체를 찾음
-            Station station = stationRepository.findByName(stationName).orElseThrow(()->new ResourceNotFoundException("해당 이름에 존재하는 정류장이 없습니다"));
-            log.info("정류장 검사 {} 정류장의 객체 - {}", stationName, station);
-        }
-        return true;
-    }
-
-    public String findStationIdByName(String name) {
-        Station station = stationRepository.findByName(name).orElseThrow(()->new ResourceNotFoundException("해당 이름에 존재하는 정류장이 없습니다"));
-        return station.getId();
     }
 }

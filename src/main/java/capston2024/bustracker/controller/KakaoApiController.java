@@ -26,21 +26,6 @@ import java.util.Map;
 public class KakaoApiController {
 
     private final KakaoApiService kakaoApiService;
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @GetMapping("/arrival-time/single")
-    public ResponseEntity<ApiResponse<ArrivalTimeResponseDTO>> getSingleArrivalTime(
-            @RequestParam String origin,
-            @RequestParam String destination) {
-        log.info("도착 예정 시간을 요청 받았습니다. 출발지: {}, 목적지: {}", origin, destination);
-        String[] origins = origin.split(",");
-        ArrivalTimeRequestDTO originDTO = new ArrivalTimeRequestDTO(origins[0], Double.parseDouble(origins[1]), Double.parseDouble(origins[2]));
-        String[] destinations = destination.split(",");
-        ArrivalTimeRequestDTO destinationDTO = new ArrivalTimeRequestDTO(destinations[0], Double.parseDouble(destinations[1]), Double.parseDouble(destinations[2]));
-        String arrivalTimeInSeconds = kakaoApiService.getSingleWaysTimeEstimate(originDTO, destinationDTO);
-        return ResponseEntity.ok(new ApiResponse<>(new ArrivalTimeResponseDTO(originDTO.getName(), arrivalTimeInSeconds), "도착예정시간이 성공적으로 조회되었습니다."));
-    }
 
     @GetMapping("/arrival-time/multi")
     public ResponseEntity<ApiResponse<BusTimeEstimateResponse>> getTimeEstimate(
