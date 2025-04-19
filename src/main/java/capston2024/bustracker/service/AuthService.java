@@ -1,7 +1,7 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.status.Role;
-import capston2024.bustracker.domain.School;
+import capston2024.bustracker.domain.Organization;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.OAuthAttributes;
 import capston2024.bustracker.domain.auth.UserCreator;
@@ -10,6 +10,7 @@ import capston2024.bustracker.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -21,9 +22,10 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
     private final UserRepository userRepository;
-    private final SchoolService schoolService;
+    private final OrganizationService organizationService;
 
     // 이메일 검증 -> 이메일을 찾을 수 없을 시 새로운 유저 생성 로직으로 넘어감
     @Transactional
@@ -40,14 +42,21 @@ public class AuthService {
 
 
     // 학교 인증후 인증 완료 시 유저의 역할이 USER 로 변경됨
-    public boolean rankUpGuestToUser(OAuth2User principal, String schoolName) {
+    public boolean rankUpGuestToUser(OAuth2User principal, String organizationId) {
         User user = getUserFromPrincipal(principal);
         if (user == null) {
             throw new RuntimeException("존재하지 않는 회원입니다.");
         }
-        School school = schoolService.getSchool(schoolName);
+
+        // 이미 USER 권한을 갖고 있는 경우
+        if (user.getRole() == Role.USER || user.getRole() == Role.ADMIN) {
+            log.info("이미 인증된 사용자입니다: {}", user.getEmail());
+            return true;
+        }
+
+        Organization organization = organizationService.getOrganization(organizationId);
         user.updateRole(Role.USER);
-        user.setOrganizationId(school.getId());
+        user.setOrganizationId(organization.getId());
         userRepository.save(user);
         return true;
     }
@@ -106,15 +115,12 @@ public class AuthService {
         if (user == null) {
             return Map.of("인증 상태", false);
         }
-        School school = schoolService.getSchoolByOrganizationId(user.getOrganizationId());
         return Map.of(
                 "인증 상태", true,
                 "name", user.getName(),
                 "email", user.getEmail(),
-                "picture", user.getPicture(),
                 "role", user.getRoleKey(),
-                "school", school.getName(),
-                "organizationId", school.getId()
+                "organizationId", user.getOrganizationId()
         );
     }
 }
