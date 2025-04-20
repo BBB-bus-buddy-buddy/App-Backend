@@ -42,7 +42,7 @@ public class KakaoApiService {
      * @param stationId 목적지 정류장 ID
      * @return 예상 소요 시간 및 경유지 정보
      */
-    public BusTimeEstimateResponse getMultiWaysTimeEstimate(String busId, String stationId) {
+    public BusArrivalEstimateResponseDTO getMultiWaysTimeEstimate(String busId, String stationId) {
         Bus bus = busRepository.findById(busId)
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 버스 입니다: " + busId));
 
@@ -65,7 +65,7 @@ public class KakaoApiService {
 
         // 이미 지난 정류장인지 확인
         if (targetIndex <= bus.getPrevStationIdx()) {
-            return BusTimeEstimateResponse.builder()
+            return BusArrivalEstimateResponseDTO.builder()
                     .estimatedTime("--분 --초")
                     .waypoints(Collections.emptyList())
                     .build();
@@ -79,7 +79,7 @@ public class KakaoApiService {
         KakaoDirectionsResponse response = requestRouteEstimate(bus, targetStation, waypoints);
         log.info("response: {}", response);
 
-        return BusTimeEstimateResponse.builder()
+        return BusArrivalEstimateResponseDTO.builder()
                 .estimatedTime(formatDuration(response.getDuration()))
                 .waypoints(waypoints.stream().map(Station::getName).collect(Collectors.toList()))
                 .build();

@@ -1,7 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.MyStationRequestDTO;
+import capston2024.bustracker.config.dto.UserFavoriteStationRequestDTO;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
@@ -50,7 +50,7 @@ public class UserController {
      */
     // 내 정류장 추가
     @PostMapping("/my-station")
-    public ResponseEntity<ApiResponse<Boolean>> addMyStation(@RequestBody MyStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<ApiResponse<Boolean>> addMyStation(@RequestBody UserFavoriteStationRequestDTO request, @AuthenticationPrincipal OAuth2User principal) {
         log.info("유저의 principal : {} ", principal);
         if (principal == null) {
             log.warn("인증된 사용자를 찾을 수 없음");

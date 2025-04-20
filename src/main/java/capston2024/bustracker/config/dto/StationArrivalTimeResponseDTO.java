@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 @Getter
 @Setter
 @AllArgsConstructor
-public class ArrivalTimeResponseDTO {
+public class StationArrivalTimeResponseDTO {
     private String name;
     private String durationMessage;  // 도착까지의 총 소요 시간 (시 분 초 형식)
 }

@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class BusLocationUpdateDTO {
+public class BusRealTimeLocationDTO {
     private String busNumber;           // 버스 번호
     private String organizationId;      // 조직 ID
     private double latitude;            // 위도
