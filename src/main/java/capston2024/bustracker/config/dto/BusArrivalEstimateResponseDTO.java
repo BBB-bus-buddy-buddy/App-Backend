@@ -11,7 +11,7 @@ import java.util.List;
 @Builder
 @Getter
 @Setter
-public class BusTimeEstimateResponse {
+public class BusArrivalEstimateResponseDTO {
     private String estimatedTime;
     private List<String> waypoints;
 }

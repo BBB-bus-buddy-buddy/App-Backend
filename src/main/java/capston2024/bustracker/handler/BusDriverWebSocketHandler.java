@@ -1,6 +1,6 @@
 package capston2024.bustracker.handler;
 
-import capston2024.bustracker.config.dto.BusLocationUpdateDTO;
+import capston2024.bustracker.config.dto.BusRealTimeLocationDTO;
 import capston2024.bustracker.service.BusService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +56,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         log.debug("버스 기사로부터 메시지 수신: {}", payload);
 
         try {
-            BusLocationUpdateDTO locationUpdate = objectMapper.readValue(payload, BusLocationUpdateDTO.class);
+            BusRealTimeLocationDTO locationUpdate = objectMapper.readValue(payload, BusRealTimeLocationDTO.class);
             String busNumber = locationUpdate.getBusNumber();
 
             // 세션 맵핑 등록 (처음 메시지를 보낼 때)

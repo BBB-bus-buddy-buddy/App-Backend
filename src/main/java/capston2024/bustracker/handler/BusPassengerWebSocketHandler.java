@@ -1,7 +1,7 @@
 package capston2024.bustracker.handler;
 
 import capston2024.bustracker.config.dto.BusBoardingDTO;
-import capston2024.bustracker.config.dto.BusStatusDTO;
+import capston2024.bustracker.config.dto.BusRealTimeStatusDTO;
 import capston2024.bustracker.service.BusService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -117,7 +117,7 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     /**
      * 특정 조직의 모든 승객에게 버스 상태 업데이트 전송
      */
-    public void broadcastBusStatus(String organizationId, BusStatusDTO busStatus) {
+    public void broadcastBusStatus(String organizationId, BusRealTimeStatusDTO busStatus) {
         Set<WebSocketSession> sessions = organizationSessions.get(organizationId);
         if (sessions != null && !sessions.isEmpty()) {
             for (WebSocketSession session : sessions) {
