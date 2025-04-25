@@ -34,6 +34,27 @@ public class UserService {
     private final MongoTemplate mongoTemplate;
     private final MongoOperations mongoOperations;
 
+    /**
+     * organizationId의 모든 이용자 조회
+     * @param organizationId
+     * @return List<User>
+     */
+    public List<User> getUsersByOrganizationId(String organizationId) {
+        log.info("조직 ID {}의 모든 사용자 조회", organizationId);
+        return userRepository.findByOrganizationId(organizationId);
+    }
+
+    public User getUserByIdAndOrganizationId(String userOrganizationId, String id) {
+        log.info("조직 ID {}의 {} 사용자 ID의 사용자 조회", userOrganizationId, id);
+        return userRepository.findByIdAndOrganizationId(id, userOrganizationId);
+    }
+
+    public void deleteUserById(String id) {
+        log.info("{} 사용자 ID의 사용자 삭제 요청", id);
+        User user = userRepository.findById(id).orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        userRepository.deleteById(user.getId());
+    }
+
     //내 정류장 조회
     public List<Station> getMyStationList(String email) {
         log.info("Email {} 사용자의 내 정류장 목록 조회를 시작합니다.", email);
@@ -119,5 +140,7 @@ public class UserService {
         log.info("사용자 {}의 내 정류장 {} 삭제가 완료되었습니다.", email, stationId);
         return true;
     }
+
+
 
 }

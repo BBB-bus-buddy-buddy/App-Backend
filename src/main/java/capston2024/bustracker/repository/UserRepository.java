@@ -4,6 +4,7 @@ import capston2024.bustracker.domain.User;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,4 +13,8 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends MongoRepository<User, String> { //구글 로그인
     Optional<User> findByEmail(String email);
+
+    List<User> findByOrganizationId(String organizationId);
+
+    User findByIdAndOrganizationId(String id, String userOrganizationId);
 }
