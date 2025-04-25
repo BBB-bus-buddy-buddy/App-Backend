@@ -22,7 +22,9 @@ public class KakaoApiController {
     public ResponseEntity<ApiResponse<BusArrivalEstimateResponseDTO>> getTimeEstimate(
             @RequestParam String busId,
             @RequestParam String stationId) {
-        return ResponseEntity.ok(new ApiResponse<>(kakaoApiService.getMultiWaysTimeEstimate(busId, stationId), "다중 도착예정시간이 성공적으로 조회되었습니다."));
+        BusArrivalEstimateResponseDTO result = kakaoApiService.getMultiWaysTimeEstimate(busId, stationId);
+        log.info("다중 도착예정 처리 결과 : {}", result);
+        return ResponseEntity.ok(new ApiResponse<>(result, "다중 도착예정시간이 성공적으로 조회되었습니다."));
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)

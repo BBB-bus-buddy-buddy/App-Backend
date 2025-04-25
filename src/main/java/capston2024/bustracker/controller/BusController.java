@@ -2,11 +2,12 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Route;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
-import capston2024.bustracker.service.AuthService;
-import capston2024.bustracker.service.BusService;
+import capston2024.bustracker.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,8 +17,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/bus")
@@ -188,6 +191,31 @@ public class BusController {
         List<BusRealTimeStatusDTO> buses = busService.getBusesByStationAndOrganization(stationId, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(buses, "정류장을 경유하는 버스가 성공적으로 조회되었습니다."));
+    }
+
+    /**
+     * 버스 정류장 상세 목록 조회
+     * 버스 라우트의 모든 정류장 상세 정보를 한 번에 반환합니다.
+     */
+    @GetMapping("/stations-detail/{busNumber}")
+    public ResponseEntity<ApiResponse<List<Station>>> getBusStationsDetail(
+            @PathVariable String busNumber,
+            @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 정류장 목록을 조회할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String organizationId = (String) userInfo.get("organizationId");
+
+        if (organizationId == null || organizationId.isEmpty()) {
+            throw new BusinessException("조직에 속하지 않은 사용자는 정류장 목록을 조회할 수 없습니다.");
+        }
+
+        List<Station> stationList = busService.getBusStationsDetail(busNumber, organizationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(stationList, "버스 정류장 상세 목록이 성공적으로 조회되었습니다."));
     }
 
     /**
