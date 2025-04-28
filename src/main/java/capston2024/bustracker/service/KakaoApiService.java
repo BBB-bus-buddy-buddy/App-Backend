@@ -38,13 +38,13 @@ public class KakaoApiService {
 
     /**
      * 다중 경유지를 포함한 남은시간 계산 API
-     * @param busId 버스 ID
+     * @param busNumber 버스 Number
      * @param stationId 목적지 정류장 ID
      * @return 예상 소요 시간 및 경유지 정보
      */
-    public BusTimeEstimateResponse getMultiWaysTimeEstimate(String busId, String stationId) {
-        Bus bus = busRepository.findById(busId)
-                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 버스 입니다: " + busId));
+    public BusArrivalEstimateResponseDTO getMultiWaysTimeEstimate(String busNumber, String stationId) {
+        Bus bus = busRepository.findBusByBusNumber(busNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 버스 입니다: " + busNumber));
 
         Station targetStation = stationRepository.findById(stationId)
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 정류장 입니다: " + stationId));
@@ -55,7 +55,7 @@ public class KakaoApiService {
             route = routeRepository.findById(bus.getRouteId().getId().toString())
                     .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트 입니다: " + bus.getRouteId().getId()));
         } else {
-            throw new ResourceNotFoundException("버스에 라우트 정보가 없습니다: " + busId);
+            throw new ResourceNotFoundException("버스에 라우트 정보가 없습니다: " + busNumber);
         }
 
         // 목표 정류장의 순서 찾기
@@ -65,7 +65,7 @@ public class KakaoApiService {
 
         // 이미 지난 정류장인지 확인
         if (targetIndex <= bus.getPrevStationIdx()) {
-            return BusTimeEstimateResponse.builder()
+            return BusArrivalEstimateResponseDTO.builder()
                     .estimatedTime("--분 --초")
                     .waypoints(Collections.emptyList())
                     .build();
@@ -79,7 +79,7 @@ public class KakaoApiService {
         KakaoDirectionsResponse response = requestRouteEstimate(bus, targetStation, waypoints);
         log.info("response: {}", response);
 
-        return BusTimeEstimateResponse.builder()
+        return BusArrivalEstimateResponseDTO.builder()
                 .estimatedTime(formatDuration(response.getDuration()))
                 .waypoints(waypoints.stream().map(Station::getName).collect(Collectors.toList()))
                 .build();

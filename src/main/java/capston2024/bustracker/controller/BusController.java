@@ -2,11 +2,12 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.Route;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
-import capston2024.bustracker.service.AuthService;
-import capston2024.bustracker.service.BusService;
+import capston2024.bustracker.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,8 +17,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/bus")
@@ -87,7 +90,7 @@ public class BusController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusModifyDTO busModifyDTO) {
+            @RequestBody BusInfoUpdateDTO busInfoUpdateDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 수정할 수 있습니다.");
@@ -100,12 +103,12 @@ public class BusController {
             throw new BusinessException("조직에 속하지 않은 사용자는 버스를 수정할 수 없습니다.");
         }
 
-        if (busModifyDTO.getBusNumber() == null || busModifyDTO.getBusNumber().trim().isEmpty()) {
+        if (busInfoUpdateDTO.getBusNumber() == null || busInfoUpdateDTO.getBusNumber().trim().isEmpty()) {
             throw new BusinessException("버스 번호는 필수입니다.");
         }
 
-        log.info("버스 수정 요청 - 버스 번호: {}, 조직: {}", busModifyDTO.getBusNumber(), organizationId);
-        boolean result = busService.modifyBus(busModifyDTO, organizationId);
+        log.info("버스 수정 요청 - 버스 번호: {}, 조직: {}", busInfoUpdateDTO.getBusNumber(), organizationId);
+        boolean result = busService.modifyBus(busInfoUpdateDTO, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(result, "버스가 성공적으로 수정되었습니다."));
     }
@@ -114,7 +117,7 @@ public class BusController {
      * 조직별 모든 버스 조회
      */
     @GetMapping()
-    public ResponseEntity<ApiResponse<List<BusStatusDTO>>> getAllBuses(
+    public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getAllBuses(
             @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
@@ -129,7 +132,7 @@ public class BusController {
         }
 
         log.info("조직별 버스 목록 조회 요청 - 조직: {}", organizationId);
-        List<BusStatusDTO> buses = busService.getAllBusStatusByOrganizationId(organizationId);
+        List<BusRealTimeStatusDTO> buses = busService.getAllBusStatusByOrganizationId(organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(buses, "모든 버스가 성공적으로 조회되었습니다."));
     }
@@ -138,7 +141,7 @@ public class BusController {
      * 특정 버스 조회
      */
     @GetMapping("/{busNumber}")
-    public ResponseEntity<ApiResponse<BusStatusDTO>> getBusByNumber(
+    public ResponseEntity<ApiResponse<BusRealTimeStatusDTO>> getBusByNumber(
             @PathVariable String busNumber,
             @AuthenticationPrincipal OAuth2User principal) {
 
@@ -155,9 +158,9 @@ public class BusController {
 
         log.info("특정 버스 조회 요청 - 버스 번호: {}, 조직: {}", busNumber, organizationId);
         Bus bus = busService.getBusByNumberAndOrganization(busNumber, organizationId);
-        List<BusStatusDTO> allBuses = busService.getAllBusStatusByOrganizationId(organizationId);
+        List<BusRealTimeStatusDTO> allBuses = busService.getAllBusStatusByOrganizationId(organizationId);
 
-        BusStatusDTO busStatus = allBuses.stream()
+        BusRealTimeStatusDTO busStatus = allBuses.stream()
                 .filter(dto -> dto.getBusNumber().equals(busNumber))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + busNumber));
@@ -169,7 +172,7 @@ public class BusController {
      * 특정 정류장을 경유하는 버스 조회
      */
     @GetMapping("/station/{stationId}")
-    public ResponseEntity<ApiResponse<List<BusStatusDTO>>> getBusesByStation(
+    public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getBusesByStation(
             @PathVariable String stationId,
             @AuthenticationPrincipal OAuth2User principal) {
 
@@ -185,9 +188,34 @@ public class BusController {
         }
 
         log.info("특정 정류장 경유 버스 조회 요청 - 정류장 ID: {}, 조직: {}", stationId, organizationId);
-        List<BusStatusDTO> buses = busService.getBusesByStationAndOrganization(stationId, organizationId);
+        List<BusRealTimeStatusDTO> buses = busService.getBusesByStationAndOrganization(stationId, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(buses, "정류장을 경유하는 버스가 성공적으로 조회되었습니다."));
+    }
+
+    /**
+     * 버스 정류장 상세 목록 조회
+     * 버스 라우트의 모든 정류장 상세 정보를 한 번에 반환합니다.
+     */
+    @GetMapping("/stations-detail/{busNumber}")
+    public ResponseEntity<ApiResponse<List<Station>>> getBusStationsDetail(
+            @PathVariable String busNumber,
+            @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 정류장 목록을 조회할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String organizationId = (String) userInfo.get("organizationId");
+
+        if (organizationId == null || organizationId.isEmpty()) {
+            throw new BusinessException("조직에 속하지 않은 사용자는 정류장 목록을 조회할 수 없습니다.");
+        }
+
+        List<Station> stationList = busService.getBusStationsDetail(busNumber, organizationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(stationList, "버스 정류장 상세 목록이 성공적으로 조회되었습니다."));
     }
 
     /**

@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class BusStatusDTO {
+public class BusRealTimeStatusDTO {
     private String busNumber;           // 버스 번호
     private String routeName;           // 노선 이름
     private String organizationId;      // 조직 ID

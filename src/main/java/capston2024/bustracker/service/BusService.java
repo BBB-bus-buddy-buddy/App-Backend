@@ -40,9 +40,10 @@ public class BusService {
     private final MongoOperations mongoOperations;
     private final BusNumberGenerator busNumberGenerator;
     private final ApplicationEventPublisher eventPublisher;
+    private final KakaoApiService kakaoApiService;
 
     // 버스 위치 업데이트 큐
-    private final Map<String, BusLocationUpdateDTO> pendingLocationUpdates = new ConcurrentHashMap<>();
+    private final Map<String, BusRealTimeLocationDTO> pendingLocationUpdates = new ConcurrentHashMap<String, BusRealTimeLocationDTO>();
 
     @Autowired
     public BusService(
@@ -51,13 +52,14 @@ public class BusService {
             StationRepository stationRepository,
             MongoOperations mongoOperations,
             BusNumberGenerator busNumberGenerator,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher, RouteService routeService, KakaoApiService kakaoApiService) {
         this.busRepository = busRepository;
         this.routeRepository = routeRepository;
         this.stationRepository = stationRepository;
         this.mongoOperations = mongoOperations;
         this.busNumberGenerator = busNumberGenerator;
         this.eventPublisher = eventPublisher;
+        this.kakaoApiService = kakaoApiService;
     }
 
     /**
@@ -65,9 +67,9 @@ public class BusService {
      */
     public static class BusStatusUpdateEvent {
         private final String organizationId;
-        private final BusStatusDTO busStatus;
+        private final BusRealTimeStatusDTO busStatus;
 
-        public BusStatusUpdateEvent(String organizationId, BusStatusDTO busStatus) {
+        public BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) {
             this.organizationId = organizationId;
             this.busStatus = busStatus;
         }
@@ -76,7 +78,7 @@ public class BusService {
             return organizationId;
         }
 
-        public BusStatusDTO getBusStatus() {
+        public BusRealTimeStatusDTO getBusStatus() {
             return busStatus;
         }
     }
@@ -157,18 +159,18 @@ public class BusService {
      * 버스 수정
      */
     @Transactional
-    public boolean modifyBus(BusModifyDTO busModifyDTO, String organizationId) {
-        if (busModifyDTO.getTotalSeats() < 0) {
+    public boolean modifyBus(BusInfoUpdateDTO busInfoUpdateDTO, String organizationId) {
+        if (busInfoUpdateDTO.getTotalSeats() < 0) {
             throw new IllegalArgumentException("전체 좌석 수는 0보다 작을 수 없습니다.");
         }
 
         // 버스 존재 확인
-        Bus bus = getBusByNumberAndOrganization(busModifyDTO.getBusNumber(), organizationId);
+        Bus bus = getBusByNumberAndOrganization(busInfoUpdateDTO.getBusNumber(), organizationId);
 
         // 라우트 변경이 있는 경우
-        if (busModifyDTO.getRouteId() != null && !busModifyDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
-            Route route = routeRepository.findById(busModifyDTO.getRouteId())
-                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busModifyDTO.getRouteId()));
+        if (busInfoUpdateDTO.getRouteId() != null && !busInfoUpdateDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
+            Route route = routeRepository.findById(busInfoUpdateDTO.getRouteId())
+                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busInfoUpdateDTO.getRouteId()));
 
             // 같은 조직의 라우트인지 확인
             if (!route.getOrganizationId().equals(organizationId)) {
@@ -184,17 +186,17 @@ public class BusService {
         }
 
         // 좌석 정보 업데이트
-        bus.setTotalSeats(busModifyDTO.getTotalSeats());
+        bus.setTotalSeats(busInfoUpdateDTO.getTotalSeats());
         int occupiedSeats = bus.getOccupiedSeats();
 
-        if (occupiedSeats > busModifyDTO.getTotalSeats()) {
+        if (occupiedSeats > busInfoUpdateDTO.getTotalSeats()) {
             log.warn("전체 좌석 수({})가 현재 사용 중인 좌석 수({})보다 적으므로 자동 조정됩니다.",
-                    busModifyDTO.getTotalSeats(), occupiedSeats);
-            occupiedSeats = busModifyDTO.getTotalSeats();
+                    busInfoUpdateDTO.getTotalSeats(), occupiedSeats);
+            occupiedSeats = busInfoUpdateDTO.getTotalSeats();
             bus.setOccupiedSeats(occupiedSeats);
         }
 
-        bus.setAvailableSeats(busModifyDTO.getTotalSeats() - occupiedSeats);
+        bus.setAvailableSeats(busInfoUpdateDTO.getTotalSeats() - occupiedSeats);
 
         busRepository.save(bus);
 
@@ -230,9 +232,95 @@ public class BusService {
     }
 
     /**
+     * 버스의 모든 정류장 상세 정보를 한 번에 조회합니다.
+     * 각 정류장의 상태(지나친 정류장, 현재 정류장)와 도착 예정 시간을 포함합니다.
+     *
+     * @param busNumber 버스 번호
+     * @param organizationId 조직 ID
+     * @return 상세 정보가 포함된 정류장 목록
+     */
+    public List<Station> getBusStationsDetail(String busNumber, String organizationId) {
+        log.info("버스 정류장 상세 정보 조회 - 버스 번호: {}, 조직: {}", busNumber, organizationId);
+
+        // 버스 조회
+        Bus bus = getBusByNumberAndOrganization(busNumber, organizationId);
+
+        // 버스의 라우트 ID 확인
+        if (bus.getRouteId() == null) {
+            throw new BusinessException("버스에 할당된 라우트가 없습니다.");
+        }
+
+        String routeId = bus.getRouteId().getId().toString();
+
+        // 라우트 조회
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new ResourceNotFoundException("해당 ID의 라우트를 찾을 수 없습니다: " + routeId));
+
+        // 조직 ID 확인
+        if (!route.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException("다른 조직의 라우트 정보에 접근할 수 없습니다.");
+        }
+
+        // 모든 정류장 ID 추출
+        List<String> stationIds = route.getStations().stream()
+                .map(routeStation -> routeStation.getStationId().getId().toString())
+                .collect(Collectors.toList());
+
+        // 한 번에 모든 정류장 조회
+        Map<String, Station> stationMap = stationRepository.findAllByIdIn(stationIds).stream()
+                .collect(Collectors.toMap(Station::getId, station -> station));
+
+        // 결과 목록 및 현재 정류장 ID 준비
+        List<Station> resultStations = new ArrayList<>();
+        String currentStationId = null;
+
+        // 순서대로 정류장 처리
+        for (int i = 0; i < route.getStations().size(); i++) {
+            Route.RouteStation routeStation = route.getStations().get(i);
+            String stationId = routeStation.getStationId().getId().toString();
+
+            Station station = stationMap.get(stationId);
+            if (station == null) {
+                log.warn("정류장 ID {} 정보를 찾을 수 없습니다", stationId);
+                continue;
+            }
+
+            // 정류장 순서와 상태 설정
+            station.setSequence(i);
+            station.setPassed(i <= bus.getPrevStationIdx());
+            station.setCurrentStation(i == bus.getPrevStationIdx() + 1);
+
+            // 현재 정류장인 경우 ID 저장
+            if (station.isCurrentStation()) {
+                currentStationId = stationId;
+            }
+
+            resultStations.add(station);
+        }
+
+        // 현재 정류장이 있으면 도착 예정 시간 추가
+        if (currentStationId != null) {
+            try {
+                BusArrivalEstimateResponseDTO arrivalTime =
+                        kakaoApiService.getMultiWaysTimeEstimate(bus.getBusNumber(), currentStationId);
+
+                // 현재 정류장 찾아서 도착 시간 설정
+                resultStations.stream()
+                        .filter(Station::isCurrentStation)
+                        .findFirst()
+                        .ifPresent(station -> station.setEstimatedArrivalTime(arrivalTime.getEstimatedTime()));
+            } catch (Exception e) {
+                log.warn("도착 시간 예측 실패: {}", e.getMessage());
+            }
+        }
+        log.info("최종 정류장 결과 {}", resultStations);
+        return resultStations;
+    }
+
+    /**
      * 버스 위치 업데이트
      */
-    public void updateBusLocation(BusLocationUpdateDTO locationUpdate) {
+    public void updateBusLocation(BusRealTimeLocationDTO locationUpdate) {
         log.debug("버스 위치 업데이트 요청: {}, 좌표: ({}, {})",
                 locationUpdate.getBusNumber(), locationUpdate.getLatitude(), locationUpdate.getLongitude());
 
@@ -282,7 +370,7 @@ public class BusService {
     /**
      * 조직별 모든 버스 상태 조회
      */
-    public List<BusStatusDTO> getAllBusStatusByOrganizationId(String organizationId) {
+    public List<BusRealTimeStatusDTO> getAllBusStatusByOrganizationId(String organizationId) {
         List<Bus> buses = getAllBusesByOrganizationId(organizationId);
         return buses.stream()
                 .map(this::convertToStatusDTO)
@@ -292,12 +380,12 @@ public class BusService {
     /**
      * 특정 정류장을 경유하는 조직의 모든 버스 조회
      */
-    public List<BusStatusDTO> getBusesByStationAndOrganization(String stationId, String organizationId) {
+    public List<BusRealTimeStatusDTO> getBusesByStationAndOrganization(String stationId, String organizationId) {
         log.info("특정 정류장을 경유하는 버스 조회 - 정류장 ID: {}, 조직 ID: {}", stationId, organizationId);
 
         // 조직의 모든 버스 조회
         List<Bus> organizationBuses = getAllBusesByOrganizationId(organizationId);
-        List<BusStatusDTO> result = new ArrayList<>();
+        List<BusRealTimeStatusDTO> result = new ArrayList<>();
 
         // 각 버스에 대해 라우트를 검사하여 해당 정류장을 경유하는지 확인
         for (Bus bus : organizationBuses) {
@@ -328,7 +416,7 @@ public class BusService {
     /**
      * 버스 객체를 StatusDTO로 변환
      */
-    private BusStatusDTO convertToStatusDTO(Bus bus) {
+    private BusRealTimeStatusDTO convertToStatusDTO(Bus bus) {
         // 라우트 정보 조회
         Route route = null;
         if (bus.getRouteId() != null) {
@@ -356,7 +444,7 @@ public class BusService {
         }
 
         // 상태 DTO 생성
-        BusStatusDTO statusDTO = new BusStatusDTO();
+        BusRealTimeStatusDTO statusDTO = new BusRealTimeStatusDTO();
         statusDTO.setBusNumber(bus.getBusNumber());
         statusDTO.setRouteName(routeName);
         statusDTO.setOrganizationId(bus.getOrganizationId());
@@ -377,7 +465,7 @@ public class BusService {
      * 버스 상태 업데이트를 클라이언트에게 브로드캐스트
      */
     private void broadcastBusStatusUpdate(Bus bus) {
-        BusStatusDTO statusDTO = convertToStatusDTO(bus);
+        BusRealTimeStatusDTO statusDTO = convertToStatusDTO(bus);
         eventPublisher.publishEvent(new BusStatusUpdateEvent(bus.getOrganizationId(), statusDTO));
     }
 
@@ -416,11 +504,11 @@ public class BusService {
     }
 
     /**
-     * 정기적으로 버스 위치 업데이트 적용 (5초마다)
+     * 정기적으로 버스 위치 업데이트 적용 (10초마다)
      */
     @Scheduled(fixedRate = 10000)
     public void flushLocationUpdates() {
-        List<BusLocationUpdateDTO> updates;
+        List<BusRealTimeLocationDTO> updates;
 
         synchronized (pendingLocationUpdates) {
             if (pendingLocationUpdates.isEmpty()) {
@@ -431,7 +519,7 @@ public class BusService {
             pendingLocationUpdates.clear();
         }
 
-        for (BusLocationUpdateDTO update : updates) {
+        for (BusRealTimeLocationDTO update : updates) {
             try {
                 Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber())
                         .and("organizationId").is(update.getOrganizationId()));
