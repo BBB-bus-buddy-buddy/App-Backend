@@ -2,7 +2,9 @@ package capston2024.bustracker.handler;
 
 import capston2024.bustracker.config.dto.BusBoardingDTO;
 import capston2024.bustracker.config.dto.BusRealTimeStatusDTO;
+import capston2024.bustracker.config.dto.PassengerLocationDTO;
 import capston2024.bustracker.service.BusService;
+import capston2024.bustracker.service.PassengerLocationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,8 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     private final Map<String, Set<WebSocketSession>> organizationSessions = new ConcurrentHashMap<>();
     // 세션 역매핑을 위한 맵 (sessionId -> organizationId)
     private final Map<String, String> sessionToOrgMap = new ConcurrentHashMap<>();
+    // 세션과 사용자 ID 매핑 (sessionId -> userId)
+    private final Map<String, String> sessionToUserMap = new ConcurrentHashMap<>();
 
     @Autowired
     public BusPassengerWebSocketHandler(ObjectMapper objectMapper, ApplicationContext applicationContext) {
@@ -46,6 +50,11 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
         return applicationContext.getBean(BusService.class);
     }
 
+    // 지연 초기화를 통해 PassengerLocationService 얻기
+    private PassengerLocationService getPassengerLocationService() {
+        return applicationContext.getBean(PassengerLocationService.class);
+    }
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         log.info("승객 WebSocket 연결 설정: {}", session.getId());
@@ -56,12 +65,14 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String sessionId = session.getId();
         String organizationId = sessionToOrgMap.remove(sessionId);
+        String userId = sessionToUserMap.remove(sessionId);
 
         if (organizationId != null) {
             Set<WebSocketSession> sessions = organizationSessions.get(organizationId);
             if (sessions != null) {
                 sessions.remove(session);
-                log.info("승객 WebSocket 연결 종료: 세션 ID = {}, 조직 ID = {}", sessionId, organizationId);
+                log.info("승객 WebSocket 연결 종료: 세션 ID = {}, 조직 ID = {}, 사용자 ID = {}",
+                        sessionId, organizationId, userId);
             }
         } else {
             log.info("승객 WebSocket 연결 종료: 세션 ID = {}", sessionId);
@@ -99,6 +110,9 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
                 case "boarding":
                     handleBoardingMessage(session, data);
                     break;
+                case "location":
+                    handleLocationMessage(session, data);
+                    break;
                 default:
                     sendErrorMessage(session, "알 수 없는 메시지 타입: " + messageType);
             }
@@ -106,6 +120,39 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("승객 메시지 처리 중 오류 발생", e);
             sendErrorMessage(session, "메시지 처리 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 승객 위치 메시지 처리
+     */
+    private void handleLocationMessage(WebSocketSession session, Map<String, Object> data) {
+        try {
+            Map<String, Object> locationData = (Map<String, Object>) data.get("data");
+
+            PassengerLocationDTO locationDTO = new PassengerLocationDTO();
+            locationDTO.setUserId((String) locationData.get("userId"));
+            locationDTO.setOrganizationId((String) data.get("organizationId"));
+            locationDTO.setLatitude((Double) locationData.get("latitude"));
+            locationDTO.setLongitude((Double) locationData.get("longitude"));
+            locationDTO.setTimestamp(System.currentTimeMillis());
+
+            // 사용자 ID 저장
+            if (locationDTO.getUserId() != null) {
+                sessionToUserMap.put(session.getId(), locationDTO.getUserId());
+            }
+
+            // 위치 처리 서비스 호출
+            boolean boardingDetected = getPassengerLocationService().processPassengerLocation(locationDTO);
+
+            if (boardingDetected) {
+                // 자동 탑승 감지 시 클라이언트에 알림
+                sendSuccessMessage(session, "버스 탑승이 자동으로 감지되었습니다.");
+            }
+
+        } catch (Exception e) {
+            log.error("위치 메시지 처리 중 오류 발생", e);
+            sendErrorMessage(session, "위치 처리 중 오류가 발생했습니다: " + e.getMessage());
         }
     }
 
