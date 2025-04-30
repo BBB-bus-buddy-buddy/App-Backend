@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -45,6 +44,31 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(request, response);
         return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
+    }
+
+    @PostMapping("/withdrawal")
+    public ResponseEntity<ApiResponse<Boolean>> withdrawal(
+            @AuthenticationPrincipal OAuth2User principal,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+
+        log.info("회원탈퇴 요청 - Principal: {}", principal);
+
+        if (principal == null) {
+            log.warn("No authenticated user found");
+            throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
+        }
+
+        boolean isSuccess = authService.withdrawUser(principal);
+
+        if (isSuccess) {
+            // 회원탈퇴 성공 후 로그아웃 처리
+            authService.logout(request, response);
+            return ResponseEntity.ok(new ApiResponse<>(true, "회원탈퇴가 성공적으로 처리되었습니다."));
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>(false, "회원탈퇴 처리 중 오류가 발생했습니다."));
+        }
     }
 
     @PostMapping("/rankUp")

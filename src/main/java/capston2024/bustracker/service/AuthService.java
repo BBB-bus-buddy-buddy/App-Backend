@@ -26,6 +26,7 @@ import java.util.Map;
 public class AuthService {
     private final UserRepository userRepository;
     private final OrganizationService organizationService;
+    private final TokenService tokenService;
 
     // 이메일 검증 -> 이메일을 찾을 수 없을 시 새로운 유저 생성 로직으로 넘어감
     @Transactional
@@ -39,7 +40,6 @@ public class AuthService {
         User newUser = UserCreator.createUserFrom(attributes);
         return userRepository.save(newUser);
     }
-
 
     // 학교 인증후 인증 완료 시 유저의 역할이 USER 로 변경됨
     public boolean rankUpGuestToUser(OAuth2User principal, String organizationId) {
@@ -61,6 +61,41 @@ public class AuthService {
         return true;
     }
 
+    /**
+     * 회원 탈퇴 기능
+     * 1. User 권한을 GUEST로 변경
+     * 2. OrganizationId를 빈 문자열로 변경
+     * 3. 해당 사용자의 토큰 삭제
+     */
+    @Transactional
+    public boolean withdrawUser(OAuth2User principal) {
+        try {
+            User user = getUserFromPrincipal(principal);
+            if (user == null) {
+                throw new RuntimeException("존재하지 않는 회원입니다.");
+            }
+
+            log.info("회원탈퇴 처리 시작 - 이메일: {}, 현재 권한: {}", user.getEmail(), user.getRole());
+
+            // 1. 권한을 GUEST로 변경
+            user.updateRole(Role.GUEST);
+
+            // 2. 조직 ID를 빈 문자열로 변경
+            user.setOrganizationId("");
+
+            // 3. 저장
+            userRepository.save(user);
+
+            // 4. 사용자 토큰 삭제
+            tokenService.deleteByUsername(user.getEmail());
+
+            log.info("회원탈퇴 처리 완료 - 이메일: {}", user.getEmail());
+            return true;
+        } catch (Exception e) {
+            log.error("회원탈퇴 처리 중 오류 발생: {}", e.getMessage(), e);
+            return false;
+        }
+    }
 
     //로그아웃
     public void logout(HttpServletRequest request, HttpServletResponse response) {
