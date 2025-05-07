@@ -90,7 +90,7 @@ public class RouteController {
      * 새로운 라우트 생성
      */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<RouteDTO>> createRoute(
             @AuthenticationPrincipal OAuth2User principal,
             @RequestBody RouteRequestDTO requestDTO) {
@@ -117,7 +117,7 @@ public class RouteController {
      * 라우트 수정
      */
     @PutMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<RouteDTO>> updateRoute(
             @AuthenticationPrincipal OAuth2User principal,
             @RequestBody RouteRequestDTO requestDTO) {
@@ -143,7 +143,7 @@ public class RouteController {
      * 라우트 삭제
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<Void>> deleteRoute(
             @PathVariable String id,
             @AuthenticationPrincipal OAuth2User principal) {

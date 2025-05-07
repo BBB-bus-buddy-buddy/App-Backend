@@ -8,6 +8,8 @@ import capston2024.bustracker.repository.OrganizationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 @Slf4j
 public class OrganizationService {
@@ -27,6 +29,14 @@ public class OrganizationService {
         log.info("ID {}로 조직(Organization)을 찾는 중입니다....", organizationId);
         return organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENTITY_NOT_FOUND, "해당 조직 코드를 찾을 수 없습니다."));
+    }
+
+    // OrganizationService.java에 추가할 메서드
+    /**
+     * 모든 조직 목록 조회
+     */
+    public List<Organization> getAllOrganizations() {
+        return organizationRepository.findAll();
     }
 
     /**
