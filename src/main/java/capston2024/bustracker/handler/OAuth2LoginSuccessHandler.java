@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.core.Authentication;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider tokenProvider;
@@ -56,7 +58,6 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             // 디바이스 타입 감지
             String userAgent = request.getHeader("User-Agent");
             String redirectUrl = determineRedirectUrl(userAgent, accessToken);
-
             // CORS 헤더 추가
             response.setHeader("Access-Control-Allow-Origin", "*");
             response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -79,6 +80,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
         String appSchemeUri;
 
+        log.info(userAgent);
+
         // User-Agent 문자열에서 디바이스 타입 감지
         if (userAgent != null) {
             if (userAgent.contains("Android")) {
@@ -86,12 +89,21 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
                 appSchemeUri = IOS_APP_SCHEME_URI;
             } else {
-                // 기본값으로 iOS 스킴 사용 (또는 필요에 따라 변경)
-                appSchemeUri = IOS_APP_SCHEME_URI;
+                log.info("웹 로그인 감지");
+                return UriComponentsBuilder
+                        .fromUriString("/admin/dashboard")
+                        .queryParam("token", encodedToken)
+                        .build(false)
+                        .toUriString();
             }
         } else {
-            // User-Agent가 null인 경우 기본값 사용
-            appSchemeUri = IOS_APP_SCHEME_URI;
+            // 그 외는 웹으로 간주
+            log.info("웹 로그인 감지");
+            return UriComponentsBuilder
+                    .fromUriString("/admin/dashboard")
+                    .queryParam("token", encodedToken)
+                    .build(false)
+                    .toUriString();
         }
 
         // 리다이렉트 URL 생성

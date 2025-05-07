@@ -1,5 +1,6 @@
 package capston2024.bustracker.repository;
 
+import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.User;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
@@ -17,4 +18,6 @@ public interface UserRepository extends MongoRepository<User, String> { //구글
     List<User> findByOrganizationId(String organizationId);
 
     User findByIdAndOrganizationId(String id, String userOrganizationId);
+
+    List<User> findByOrganizationIdAndRole(String organizationId, Role role);
 }

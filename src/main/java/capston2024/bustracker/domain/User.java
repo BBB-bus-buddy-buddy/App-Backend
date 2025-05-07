@@ -30,6 +30,7 @@ public class User extends BaseEntity {
     private String name; // 이름
     @NotNull
     private String email; // 이메일
+    private String password; // 비밀번호 (STAFF 계정용)
     private Role role;
     private String organizationId; // 기관 인증 Id
     private List<DBRef> myStations;
