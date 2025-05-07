@@ -35,7 +35,7 @@ public class BusController {
      * 버스 추가
      */
     @PostMapping()
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<String>> createBus(
             @AuthenticationPrincipal OAuth2User principal,
             @RequestBody BusRegisterDTO busRegisterDTO) {
@@ -61,7 +61,7 @@ public class BusController {
      * 버스 삭제
      */
     @DeleteMapping("/{busNumber}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<Boolean>> deleteBus(
             @PathVariable String busNumber,
             @AuthenticationPrincipal OAuth2User principal) {
@@ -87,7 +87,7 @@ public class BusController {
      * 버스 수정
      */
     @PutMapping()
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(
             @AuthenticationPrincipal OAuth2User principal,
             @RequestBody BusInfoUpdateDTO busInfoUpdateDTO) {
