@@ -61,7 +61,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
             // 디바이스 타입 감지
             String userAgent = request.getHeader("User-Agent");
-            String redirectUrl = determineRedirectUrl(userAgent, accessToken);
+            String redirectUrl = determineRedirectUrl(userAgent, accessToken, isDriver);
 
             // CORS 헤더 추가
             response.setHeader("Access-Control-Allow-Origin", "*");
@@ -81,7 +81,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     /**
      * User-Agent 헤더를 분석하여 디바이스 타입에 맞는 리다이렉트 URL을 결정합니다.
      */
-    private String determineRedirectUrl(String userAgent, String accessToken) throws IOException {
+    private String determineRedirectUrl(String userAgent, String accessToken, boolean isDriver) throws IOException {
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
         String appSchemeUri;
 
@@ -90,9 +90,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         // User-Agent 문자열에서 디바이스 타입 감지
         if (userAgent != null) {
             if (userAgent.contains("Android")) {
-                appSchemeUri = ANDROID_APP_SCHEME_URI;
+                // 운전자와 일반 사용자 구분
+                appSchemeUri = isDriver ? DRIVER_ANDROID_APP_SCHEME_URL : ANDROID_APP_SCHEME_URI;
             } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
-                appSchemeUri = IOS_APP_SCHEME_URI;
+                // 운전자와 일반 사용자 구분
+                appSchemeUri = isDriver ? DRIVER_IOS_APP_SCHEME_URL : IOS_APP_SCHEME_URI;
             } else {
                 log.info("웹 로그인 감지");
                 return UriComponentsBuilder
