@@ -18,6 +18,9 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -26,12 +29,12 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
 
-    // 앱 스킴 URL
+    // 앱 스킴 URL 정의
     private static final String DRIVER_IOS_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
     private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
     private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.Busbuddybuddy://oauth2callback";
     private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
-    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L;
+    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
@@ -41,6 +44,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
         String accessToken;
         try {
+            // 토큰 처리 로직
             if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
                 long refreshTokenRemainTime = tokenProvider.getTokenExpirationTime(existingToken.getRefreshToken());
 
@@ -72,20 +76,25 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             response.sendRedirect(redirectUrl);
 
         } catch (Exception e) {
-            // 에러 로깅
-            e.printStackTrace();
+            log.error("인증 성공 처리 중 오류 발생", e);
             throw new ServletException("Authentication failed");
         }
     }
 
     /**
-     * User-Agent 헤더를 분석하여 디바이스 타입에 맞는 리다이렉트 URL을 결정합니다.
+     * User-Agent 헤더를 분석하여 디바이스 타입과 사용자 역할에 맞는 리다이렉트 URL을 결정합니다.
+     *
+     * @param userAgent 사용자의 디바이스 정보
+     * @param accessToken 발급된 액세스 토큰
+     * @param isDriver 운전자 여부
+     * @return 적절한 리다이렉트 URL
      */
     private String determineRedirectUrl(String userAgent, String accessToken, boolean isDriver) throws IOException {
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
         String appSchemeUri;
 
-        log.info(userAgent);
+        log.info("User-Agent: {}", userAgent);
+        log.info("사용자 역할: {}", isDriver ? "운전자" : "일반 사용자");
 
         // User-Agent 문자열에서 디바이스 타입 감지
         if (userAgent != null) {
@@ -112,6 +121,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                     .build(false)
                     .toUriString();
         }
+
+        log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
 
         // 리다이렉트 URL 생성
         return UriComponentsBuilder
