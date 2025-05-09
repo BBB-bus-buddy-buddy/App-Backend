@@ -95,13 +95,25 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         // 토큰 URL 인코딩
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
 
-        // 사용자 역할 확인
+        // 사용자 역할 확인 - 모든 역할 체크
+        boolean isGuest = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.GUEST.getKey()));
+        boolean isUser = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.USER.getKey()));
         boolean isDriver = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
         boolean isStaff = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.STAFF.getKey()));
         boolean isAdmin = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.ADMIN.getKey()));
+
+        // 사용자 역할 로깅
+        String roleStr = isAdmin ? "총관리자" :
+                isStaff ? "조직 관리자" :
+                        isDriver ? "운전자" :
+                                isUser ? "인증된 사용자" :
+                                        isGuest ? "게스트" : "알 수 없음";
+        log.info("사용자 역할: {}", roleStr);
 
         // 웹 사용자(STAFF, ADMIN)는 항상 웹 대시보드로 리다이렉트
         if (isStaff || isAdmin) {
@@ -121,19 +133,20 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             if (userAgent.contains("Android")) {
                 // Android 디바이스용 앱 스킴 선택
                 appSchemeUri = isDriver ? DRIVER_ANDROID_APP_SCHEME_URL : ANDROID_APP_SCHEME_URI;
-                log.info("Android 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : "사용자");
+                log.info("Android 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : (isUser ? "사용자" : "게스트"));
             } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
                 // iOS 디바이스용 앱 스킴 선택
                 appSchemeUri = isDriver ? DRIVER_IOS_APP_SCHEME_URL : IOS_APP_SCHEME_URI;
-                log.info("iOS 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : "사용자");
+                log.info("iOS 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : (isUser ? "사용자" : "게스트"));
             } else {
                 // 웹 브라우저이지만 앱 사용자(GUEST, USER, DRIVER)인 경우
                 // 웹에서 로그인했지만 모바일 앱 사용자를 위한 안내 페이지로 리다이렉트
-                log.info("앱 사용자의 웹 브라우저 로그인 감지 - 앱 다운로드 안내 페이지로 리다이렉트");
+                String role = isDriver ? "driver" : (isUser ? "user" : "guest");
+                log.info("앱 사용자({})의 웹 브라우저 로그인 감지 - 앱 다운로드 안내 페이지로 리다이렉트", role);
                 return UriComponentsBuilder
                         .fromUriString("/app-download")
-                        .queryParam("role", isDriver ? "driver" : "user")
-                        .queryParam("token", encodedToken) // 토큰 포함 (선택적)
+                        .queryParam("role", role)
+                        .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
             }
@@ -153,7 +166,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         return UriComponentsBuilder
                 .fromUriString(appSchemeUri)
                 .queryParam("token", encodedToken)
-                .build(false)  // URL 인코딩 비활성화 (이미 인코딩했으므로)
+                .build(false)
                 .toUriString();
     }
 }
