@@ -55,9 +55,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 tokenProvider.generateRefreshToken(authentication, accessToken);
             }
 
+            // 사용자 역할 확인 (Authentication 객체에서 권한 정보 추출)
+            boolean isDriver = authentication.getAuthorities().stream()
+                    .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
+
             // 디바이스 타입 감지
             String userAgent = request.getHeader("User-Agent");
             String redirectUrl = determineRedirectUrl(userAgent, accessToken);
+
             // CORS 헤더 추가
             response.setHeader("Access-Control-Allow-Origin", "*");
             response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
