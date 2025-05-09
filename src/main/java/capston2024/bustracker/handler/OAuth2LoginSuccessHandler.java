@@ -59,13 +59,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 tokenProvider.generateRefreshToken(authentication, accessToken);
             }
 
-            // 사용자 역할 확인 (Authentication 객체에서 권한 정보 추출)
-            boolean isDriver = authentication.getAuthorities().stream()
-                    .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
-
-            // 디바이스 타입 감지
+            // 디바이스 타입 감지 및 역할 기반 리다이렉션
             String userAgent = request.getHeader("User-Agent");
-            String redirectUrl = determineRedirectUrl(userAgent, accessToken, isDriver);
+            String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication);
 
             // CORS 헤더 추가
             response.setHeader("Access-Control-Allow-Origin", "*");
@@ -82,39 +78,37 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     }
 
     /**
-     * User-Agent 헤더를 분석하여 디바이스 타입과 사용자 역할에 맞는 리다이렉트 URL을 결정합니다.
-     *
-     * @param userAgent 사용자의 디바이스 정보
-     * @param accessToken 발급된 액세스 토큰
-     * @param isDriver 운전자 여부
-     * @return 적절한 리다이렉트 URL
+     * 사용자 디바이스와 역할에 따른 리다이렉트 URL 결정
      */
-    private String determineRedirectUrl(String userAgent, String accessToken, boolean isDriver) throws IOException {
+    private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication) throws IOException {
+        // 토큰 URL 인코딩
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
         String appSchemeUri;
 
-        log.info("User-Agent: {}", userAgent);
-        log.info("사용자 역할: {}", isDriver ? "운전자" : "일반 사용자");
+        // 사용자 역할 확인
+        boolean isGuest = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.GUEST.getKey()));
+        boolean isUser = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.USER.getKey()));
+        boolean isDriver = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
+        boolean isStaff = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.STAFF.getKey()));
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.ADMIN.getKey()));
 
-        // User-Agent 문자열에서 디바이스 타입 감지
-        if (userAgent != null) {
-            if (userAgent.contains("Android")) {
-                // 운전자와 일반 사용자 구분
-                appSchemeUri = isDriver ? DRIVER_ANDROID_APP_SCHEME_URL : ANDROID_APP_SCHEME_URI;
-            } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
-                // 운전자와 일반 사용자 구분
-                appSchemeUri = isDriver ? DRIVER_IOS_APP_SCHEME_URL : IOS_APP_SCHEME_URI;
-            } else {
-                log.info("웹 로그인 감지");
-                return UriComponentsBuilder
-                        .fromUriString("/admin/dashboard")
-                        .queryParam("token", encodedToken)
-                        .build(false)
-                        .toUriString();
-            }
-        } else {
-            // 그 외는 웹으로 간주
-            log.info("웹 로그인 감지");
+        // 사용자 역할 로깅
+        String roleStr = isAdmin ? "총관리자" :
+                isStaff ? "조직 관리자" :
+                        isDriver ? "운전자" :
+                                isUser ? "인증된 사용자" :
+                                        isGuest ? "게스트" : "알 수 없음";
+        log.info("User-Agent: {}", userAgent);
+        log.info("사용자 역할: {}", roleStr);
+
+        // 관리자/조직 관리자는 웹 대시보드로 리다이렉트
+        if (isAdmin || isStaff) {
+            log.info("관리자/조직 관리자 - 웹 대시보드로 리다이렉트");
             return UriComponentsBuilder
                     .fromUriString("/admin/dashboard")
                     .queryParam("token", encodedToken)
@@ -122,9 +116,37 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                     .toUriString();
         }
 
+        // 앱 사용자 처리 (GUEST, USER, DRIVER)
+        if (userAgent != null) {
+            if (userAgent.contains("Android")) {
+                // Android 디바이스용 앱 스킴 선택
+                appSchemeUri = isDriver ? DRIVER_ANDROID_APP_SCHEME_URL : ANDROID_APP_SCHEME_URI;
+            } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
+                // iOS 디바이스용 앱 스킴 선택
+                appSchemeUri = isDriver ? DRIVER_IOS_APP_SCHEME_URL : IOS_APP_SCHEME_URI;
+            } else {
+                // 웹 브라우저이지만 앱 사용자인 경우 - 앱 다운로드 안내 페이지로 리다이렉트
+                log.info("앱 사용자의 웹 브라우저 로그인 감지 - 앱 다운로드 페이지로 리다이렉트");
+                return UriComponentsBuilder
+                        .fromUriString("/app-download")
+                        .queryParam("role", isDriver ? "driver" : "user")
+                        .queryParam("token", encodedToken)
+                        .build(false)
+                        .toUriString();
+            }
+        } else {
+            // User-Agent 없는 경우 기본 웹 페이지로 리다이렉트
+            log.info("User-Agent 없음 - 기본 페이지로 리다이렉트");
+            return UriComponentsBuilder
+                    .fromUriString("/")
+                    .queryParam("token", encodedToken)
+                    .build(false)
+                    .toUriString();
+        }
+
         log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
 
-        // 리다이렉트 URL 생성
+        // 앱 스킴 URL에 토큰 추가하여 리다이렉트
         return UriComponentsBuilder
                 .fromUriString(appSchemeUri)
                 .queryParam("token", encodedToken)
