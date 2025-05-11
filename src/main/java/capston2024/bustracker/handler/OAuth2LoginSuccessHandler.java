@@ -138,21 +138,21 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         // 웹 환경: 관리자 계정은 해당 페이지로, 다른 계정은 앱 안내 페이지로
         if (!isMobileDevice) {
             if (isAdmin) {
-                log.info("웹 환경에서 ADMIN 로그인 - 관리자 대시보드로 리다이렉트");
+                log.info("웹 사용자(총관리자) - 웹 대시보드로 리다이렉트");
                 return UriComponentsBuilder
                         .fromUriString("/admin/dashboard")
                         .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
-            } else if (isStaff) {
-                log.info("웹 환경에서 STAFF 로그인 - 조직 관리 페이지로 리다이렉트");
-                // 조직 관리 페이지 링크는 요구사항에 따라 수정 가능
+            } else if(isStaff) { // STAFF
+                log.info("웹 사용자(조직 관리자) - 조직 관리자 대시보드로 리다이렉트");
                 return UriComponentsBuilder
-                        .fromUriString("/admin/dashboard") // 실제 조직 관리 페이지 URL로 변경 필요
+                        .fromUriString("/staff/dashboard")
                         .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
-            } else {
+            }
+            else {
                 // 앱 사용자(GUEST, USER, DRIVER)의 웹 로그인 - 앱 다운로드 안내
                 String role = isDriver ? "driver" : "user";
                 log.info("웹 환경에서 앱 사용자({}) 로그인 - 앱 다운로드 안내 페이지로 리다이렉트", role);
