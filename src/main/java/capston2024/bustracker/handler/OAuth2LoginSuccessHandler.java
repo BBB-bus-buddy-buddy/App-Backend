@@ -20,8 +20,8 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
- * - 앱 사용자(GUEST, USER, DRIVER): 모바일 앱으로 리다이렉트
- * - 웹 사용자(STAFF, ADMIN): 웹 대시보드로 리다이렉트
+ * - 웹 환경: ADMIN은 대시보드로, STAFF는 조직 관리 페이지로 리다이렉트
+ * - 앱 환경: DRIVER는 DRIVER 앱으로, 나머지 모든 역할은 USER 앱으로 리다이렉트
  */
 @Component
 @RequiredArgsConstructor
@@ -88,14 +88,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     /**
      * 사용자 디바이스와 역할에 따른 리다이렉트 URL 결정
-     * - 앱 사용자(GUEST, USER, DRIVER): 모바일 앱으로 리다이렉트
-     * - 웹 사용자(STAFF, ADMIN): 웹 대시보드로 리다이렉트
+     * - 웹 환경: ADMIN/STAFF는 관리자 페이지로, 다른 역할은 앱 안내 페이지로
+     * - 앱 환경: DRIVER는 DRIVER 앱으로, 다른 모든 역할(ADMIN/STAFF 포함)은 USER 앱으로 리다이렉트
      */
     private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication) throws IOException {
         // 토큰 URL 인코딩
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
 
-        // 사용자 역할 확인 - 모든 역할 체크
+        // 사용자 역할 확인
         boolean isGuest = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.GUEST.getKey()));
         boolean isUser = authentication.getAuthorities().stream()
@@ -115,34 +115,47 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                                         isGuest ? "게스트" : "알 수 없음";
         log.info("사용자 역할: {}", roleStr);
 
-        // 웹 사용자(STAFF, ADMIN)는 항상 웹 대시보드로 리다이렉트
-        if (isStaff || isAdmin) {
-            log.info("웹 사용자(관리자/조직 관리자) - 웹 대시보드로 리다이렉트");
-            return UriComponentsBuilder
-                    .fromUriString("/admin/dashboard")
-                    .queryParam("token", encodedToken)
-                    .build(false)
-                    .toUriString();
+        // User-Agent가 없는 경우 처리(추후, 개발 제안)
+        /*
+         * REVIEWER NOTE: User-Agent가 없는 경우에 대한 예외 처리가 필요할 것으로 생각됨
+         *
+         * 필요한 이유
+         * 1. API 테스트 도구(Postman 등)나 자동화된 테스트에서 User-Agent를 설정하지 않고 요청할 수 있음
+         * 2. 보안 도구나 프록시를 사용하는 사용자가 User-Agent를 제거하고 접근할 가능성이 있음
+         * 3. NullPointerException 방지를 통한 서버 안정성 확보
+         * 4. 비정상적인 요청 패턴 감지를 위한 로깅 목적
+         */
+        if (userAgent == null) {
+            log.info("설명");
+            // 1. 자동화된 도구나 봇: 웹 스크래퍼, API 테스트 도구(Postman 등), 또는 일부 봇은 User-Agent 헤더를 설정하지 않고 요청을 보낼 가능성
+            // 2. 보안 도구 사용: 일부 사용자는 프라이버시 보호를 위해 User-Agent를 숨기거나 제거하는 브라우저 확장 프로그램이나 프록시를 사용할 가능성
         }
 
-        // 앱 사용자(GUEST, USER, DRIVER) 처리
-        // 디바이스에 따른 적절한 앱 스킴 선택
-        String appSchemeUri;
+        // 모바일 환경과 웹 환경 구분
+        boolean isMobileDevice = isMobileDevice(userAgent);
+        log.info("디바이스 타입: {}", isMobileDevice ? "모바일" : "웹");
 
-        if (userAgent != null) {
-            if (userAgent.contains("Android")) {
-                // Android 디바이스용 앱 스킴 선택
-                appSchemeUri = isDriver ? DRIVER_ANDROID_APP_SCHEME_URL : ANDROID_APP_SCHEME_URI;
-                log.info("Android 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : (isUser ? "사용자" : "게스트"));
-            } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
-                // iOS 디바이스용 앱 스킴 선택
-                appSchemeUri = isDriver ? DRIVER_IOS_APP_SCHEME_URL : IOS_APP_SCHEME_URI;
-                log.info("iOS 디바이스 감지 - {} 앱으로 리다이렉트", isDriver ? "운전자" : (isUser ? "사용자" : "게스트"));
+        // 웹 환경: 관리자 계정은 해당 페이지로, 다른 계정은 앱 안내 페이지로
+        if (!isMobileDevice) {
+            if (isAdmin) {
+                log.info("웹 환경에서 ADMIN 로그인 - 관리자 대시보드로 리다이렉트");
+                return UriComponentsBuilder
+                        .fromUriString("/admin/dashboard")
+                        .queryParam("token", encodedToken)
+                        .build(false)
+                        .toUriString();
+            } else if (isStaff) {
+                log.info("웹 환경에서 STAFF 로그인 - 조직 관리 페이지로 리다이렉트");
+                // 조직 관리 페이지 링크는 요구사항에 따라 수정 가능
+                return UriComponentsBuilder
+                        .fromUriString("/admin/dashboard") // 실제 조직 관리 페이지 URL로 변경 필요
+                        .queryParam("token", encodedToken)
+                        .build(false)
+                        .toUriString();
             } else {
-                // 웹 브라우저이지만 앱 사용자(GUEST, USER, DRIVER)인 경우
-                // 웹에서 로그인했지만 모바일 앱 사용자를 위한 안내 페이지로 리다이렉트
-                String role = isDriver ? "driver" : (isUser ? "user" : "guest");
-                log.info("앱 사용자({})의 웹 브라우저 로그인 감지 - 앱 다운로드 안내 페이지로 리다이렉트", role);
+                // 앱 사용자(GUEST, USER, DRIVER)의 웹 로그인 - 앱 다운로드 안내
+                String role = isDriver ? "driver" : "user";
+                log.info("웹 환경에서 앱 사용자({}) 로그인 - 앱 다운로드 안내 페이지로 리다이렉트", role);
                 return UriComponentsBuilder
                         .fromUriString("/app-download")
                         .queryParam("role", role)
@@ -150,23 +163,44 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                         .build(false)
                         .toUriString();
             }
-        } else {
-            // User-Agent 없는 경우 기본 웹 페이지로 리다이렉트
-            log.info("User-Agent 없음 - 기본 페이지로 리다이렉트");
+        }
+        // 모바일 환경: DRIVER는 DRIVER 앱으로, 나머지 모든 역할은 USER 앱으로
+        else {
+            String appSchemeUri;
+
+            if (isDriver) {
+                // DRIVER 역할은 DRIVER 앱으로 리다이렉트
+                appSchemeUri = userAgent.contains("Android") ?
+                        DRIVER_ANDROID_APP_SCHEME_URL : DRIVER_IOS_APP_SCHEME_URL;
+                log.info("모바일 환경에서 DRIVER 로그인 - DRIVER 앱으로 리다이렉트");
+            } else {
+                // 다른 모든 역할(GUEST, USER, STAFF, ADMIN)은 USER 앱으로 리다이렉트
+                appSchemeUri = userAgent.contains("Android") ?
+                        ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
+                log.info("모바일 환경에서 {} 로그인 - USER 앱으로 리다이렉트", roleStr);
+            }
+
+            log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
+
+            // 앱 스킴 URL에 토큰 추가하여 리다이렉트
             return UriComponentsBuilder
-                    .fromUriString("/")
+                    .fromUriString(appSchemeUri)
                     .queryParam("token", encodedToken)
                     .build(false)
                     .toUriString();
         }
+    }
 
-        log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
-
-        // 앱 스킴 URL에 토큰 추가하여 리다이렉트
-        return UriComponentsBuilder
-                .fromUriString(appSchemeUri)
-                .queryParam("token", encodedToken)
-                .build(false)
-                .toUriString();
+    /**
+     * User-Agent로 모바일 디바이스 여부 확인
+     */
+    private boolean isMobileDevice(String userAgent) {
+        if (userAgent == null) {
+            return false;
+        }
+        return userAgent.contains("Android") ||
+                userAgent.contains("iPhone") ||
+                userAgent.contains("iPad") ||
+                userAgent.contains("iPod");
     }
 }
