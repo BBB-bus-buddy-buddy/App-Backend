@@ -181,7 +181,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             else {
                 appSchemeUri = userAgent.contains("Android") ?
                         ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
-                log.info("사용자 앱에서 로그인 - 사용자ㄴ 앱으로 리다이렉트");
+                log.info("사용자 앱에서 로그인 - 사용자 앱으로 리다이렉트");
             }
 
             log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
