@@ -5,6 +5,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,15 +29,22 @@ public class CustomAuthorizationRequestResolver implements OAuth2AuthorizationRe
         return customizeAuthorizationRequest(req, request);
     }
 
+    // In CustomAuthorizationRequestResolver
     private OAuth2AuthorizationRequest customizeAuthorizationRequest(OAuth2AuthorizationRequest req, HttpServletRequest request) {
         if (req == null) return null;
-        Map<String, Object> extraParams = new HashMap<>(req.getAdditionalParameters());
+
         String appType = request.getParameter("app");
+
+        // Create a custom state that includes the app type
+        String originalState = req.getState();
+        String customState = originalState;
         if (appType != null) {
-            extraParams.put("app", appType);
+            // Use a format that can be easily parsed later, e.g. originalState + "__app:" + appType
+            customState = originalState + "__app:" + appType;
         }
+
         return OAuth2AuthorizationRequest.from(req)
-                .additionalParameters(extraParams)
+                .state(customState)
                 .build();
     }
 }
