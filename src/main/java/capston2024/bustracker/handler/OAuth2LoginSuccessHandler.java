@@ -72,8 +72,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
             // 디바이스 타입 감지 및 역할 기반 리다이렉션 처리
             String userAgent = request.getHeader("User-Agent");
-            String appType = request.getParameter("app"); // driver/user 구분
-            boolean isDriverApp = appType.equals("driver");
+            String state = request.getParameter("state");
+            String appType = null;
+            if (state != null && state.contains("__app:")) {
+                appType = state.substring(state.indexOf("__app:") + 6);
+            }
+
+            log.info("appType = {}", appType);
+            boolean isDriverApp = appType != null && appType.equals("driver");
 
             String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication, isDriverApp);
 
@@ -175,7 +181,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             else {
                 appSchemeUri = userAgent.contains("Android") ?
                         ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
-                log.info("사용자 앱에서 로그인 - 사용자ㄴ 앱으로 리다이렉트");
+                log.info("사용자 앱에서 로그인 - 사용자 앱으로 리다이렉트");
             }
 
             log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
