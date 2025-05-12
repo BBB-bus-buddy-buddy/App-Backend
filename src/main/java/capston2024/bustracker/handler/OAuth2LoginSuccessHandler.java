@@ -34,7 +34,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final TokenService tokenService;
 
     // 앱 스킴 URL 정의
-    private static final String DRIVER_IOS_APP_SCHEME_URL = "org.reactjs.native.example.BBB-driver://oauth2callback";
+    private static final String DRIVER_IOS_APP_SCHEME_URL = "org.reactjs.native.example.driver://oauth2callback";
     private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://oauth2callback";
     private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.Busbuddybuddy://oauth2callback";
     private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
@@ -72,7 +72,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
             // 디바이스 타입 감지 및 역할 기반 리다이렉션 처리
             String userAgent = request.getHeader("User-Agent");
-            boolean isDriverApp = false;
+            String appType = request.getParameter("app"); // driver/user 구분
+            boolean isDriverApp = appType.equals("driver");
 
             String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication, isDriverApp);
 
