@@ -20,7 +20,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
- * - 웹 환경: ADMIN은 대시보드로, STAFF는 조직 관리 페이지로 리다이렉트
+ * - 웹 환경: ADMIN은 대시보드로 리다이렉트
  * - 앱 환경: DRIVER는 DRIVER 앱으로, 나머지 모든 역할은 USER 앱으로 리다이렉트
  */
 @Component
@@ -88,8 +88,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     /**
      * 사용자 디바이스와 역할에 따른 리다이렉트 URL 결정
-     * - 웹 환경: ADMIN/STAFF는 관리자 페이지로, 다른 역할은 앱 안내 페이지로
-     * - 앱 환경: DRIVER는 DRIVER 앱으로, 다른 모든 역할(ADMIN/STAFF 포함)은 USER 앱으로 리다이렉트
+     * - 웹 환경: ADMIN은 관리자 페이지로, 다른 역할은 앱 안내 페이지로
+     * - 앱 환경: DRIVER는 DRIVER 앱으로, ADMIN은 USER 앱으로 리다이렉트
      */
     private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication) throws IOException {
         // 토큰 URL 인코딩
@@ -102,17 +102,14 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 .anyMatch(authority -> authority.getAuthority().equals(Role.USER.getKey()));
         boolean isDriver = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
-        boolean isStaff = authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals(Role.STAFF.getKey()));
         boolean isAdmin = authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals(Role.ADMIN.getKey()));
 
         // 사용자 역할 로깅
         String roleStr = isAdmin ? "총관리자" :
-                isStaff ? "조직 관리자" :
-                        isDriver ? "운전자" :
-                                isUser ? "인증된 사용자" :
-                                        isGuest ? "게스트" : "알 수 없음";
+                isDriver ? "운전자" :
+                        isUser ? "인증된 사용자" :
+                                isGuest ? "게스트" : "알 수 없음";
         log.info("사용자 역할: {}", roleStr);
 
         // User-Agent가 없는 경우 처리(추후, 개발 제안)
@@ -144,15 +141,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                         .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
-            } else if(isStaff) { // STAFF
-                log.info("웹 사용자(조직 관리자) - 조직 관리자 대시보드로 리다이렉트");
-                return UriComponentsBuilder
-                        .fromUriString("/staff/dashboard")
-                        .queryParam("token", encodedToken)
-                        .build(false)
-                        .toUriString();
-            }
-            else {
+            } else {
                 // 앱 사용자(GUEST, USER, DRIVER)의 웹 로그인 - 앱 다운로드 안내
                 String role = isDriver ? "driver" : "user";
                 log.info("웹 환경에서 앱 사용자({}) 로그인 - 앱 다운로드 안내 페이지로 리다이렉트", role);
@@ -174,7 +163,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                         DRIVER_ANDROID_APP_SCHEME_URL : DRIVER_IOS_APP_SCHEME_URL;
                 log.info("모바일 환경에서 DRIVER 로그인 - DRIVER 앱으로 리다이렉트");
             } else {
-                // 다른 모든 역할(GUEST, USER, STAFF, ADMIN)은 USER 앱으로 리다이렉트
+                // 다른 모든 역할(GUEST, USER, ADMIN)은 USER 앱으로 리다이렉트
                 appSchemeUri = userAgent.contains("Android") ?
                         ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
                 log.info("모바일 환경에서 {} 로그인 - USER 앱으로 리다이렉트", roleStr);
