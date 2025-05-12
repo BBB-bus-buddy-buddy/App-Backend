@@ -18,6 +18,11 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
+ * - 웹 환경: ADMIN은 대시보드로 리다이렉트
+ * - 앱 환경: DRIVER는 DRIVER 앱으로, 나머지 모든 역할은 USER 앱으로 리다이렉트
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -26,13 +31,17 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
 
-    // 앱 스킴 URL
-
-    // 여기에 버스기사 앱 스킴 URL 포함할 것 @엄지석
+    // 앱 스킴 URL 정의
+    private static final String DRIVER_IOS_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
+    private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
     private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.Busbuddybuddy://oauth2callback";
     private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
-    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L;
+    private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
 
+    /**
+     * 인증 성공 시 호출되는 메서드
+     * 사용자 토큰을 관리하고 적절한 애플리케이션으로 리다이렉트
+     */
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException, ServletException {
@@ -41,24 +50,29 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
         String accessToken;
         try {
+            // 기존 토큰이 있고 유효한 경우 처리
             if (existingToken != null && tokenProvider.validateToken(existingToken.getRefreshToken())) {
                 long refreshTokenRemainTime = tokenProvider.getTokenExpirationTime(existingToken.getRefreshToken());
 
+                // 리프레시 토큰 순환 시간이 남아있으면 액세스 토큰만 재발급
                 if (refreshTokenRemainTime > REFRESH_TOKEN_ROTATION_TIME) {
                     accessToken = tokenProvider.reissueAccessToken(existingToken.getAccessToken());
                 } else {
+                    // 리프레시 토큰 순환 시간이 임박하면 모든 토큰 재발급
                     accessToken = tokenProvider.generateAccessToken(authentication);
                     tokenProvider.generateRefreshToken(authentication, accessToken);
                 }
             } else {
+                // 기존 토큰이 없거나 유효하지 않은 경우 신규 발급
                 accessToken = tokenProvider.generateAccessToken(authentication);
                 tokenProvider.generateRefreshToken(authentication, accessToken);
             }
 
-            // 디바이스 타입 감지
+            // 디바이스 타입 감지 및 역할 기반 리다이렉션 처리
             String userAgent = request.getHeader("User-Agent");
-            String redirectUrl = determineRedirectUrl(userAgent, accessToken);
-            // CORS 헤더 추가
+            String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication);
+
+            // CORS 헤더 설정
             response.setHeader("Access-Control-Allow-Origin", "*");
             response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
             response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
@@ -67,50 +81,119 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             response.sendRedirect(redirectUrl);
 
         } catch (Exception e) {
-            // 에러 로깅
-            e.printStackTrace();
+            log.error("인증 성공 처리 중 오류 발생", e);
             throw new ServletException("Authentication failed");
         }
     }
 
     /**
-     * User-Agent 헤더를 분석하여 디바이스 타입에 맞는 리다이렉트 URL을 결정합니다.
+     * 사용자 디바이스와 역할에 따른 리다이렉트 URL 결정
+     * - 웹 환경: ADMIN은 관리자 페이지로, 다른 역할은 앱 안내 페이지로
+     * - 앱 환경: DRIVER는 DRIVER 앱으로, ADMIN은 USER 앱으로 리다이렉트
      */
-    private String determineRedirectUrl(String userAgent, String accessToken) throws IOException {
+    private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication) throws IOException {
+        // 토큰 URL 인코딩
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
-        String appSchemeUri;
 
-        log.info(userAgent);
+        // 사용자 역할 확인
+        boolean isGuest = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.GUEST.getKey()));
+        boolean isUser = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.USER.getKey()));
+        boolean isDriver = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.DRIVER.getKey()));
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(Role.ADMIN.getKey()));
 
-        // User-Agent 문자열에서 디바이스 타입 감지
-        if (userAgent != null) {
-            if (userAgent.contains("Android")) {
-                appSchemeUri = ANDROID_APP_SCHEME_URI;
-            } else if (userAgent.contains("iPhone") || userAgent.contains("iPad") || userAgent.contains("iPod")) {
-                appSchemeUri = IOS_APP_SCHEME_URI;
-            } else {
-                log.info("웹 로그인 감지");
+        // 사용자 역할 로깅
+        String roleStr = isAdmin ? "총관리자" :
+                isDriver ? "운전자" :
+                        isUser ? "인증된 사용자" :
+                                isGuest ? "게스트" : "알 수 없음";
+        log.info("사용자 역할: {}", roleStr);
+
+        // User-Agent가 없는 경우 처리(추후, 개발 제안)
+        /*
+         * REVIEWER NOTE: User-Agent가 없는 경우에 대한 예외 처리가 필요할 것으로 생각됨
+         *
+         * 필요한 이유
+         * 1. API 테스트 도구(Postman 등)나 자동화된 테스트에서 User-Agent를 설정하지 않고 요청할 수 있음
+         * 2. 보안 도구나 프록시를 사용하는 사용자가 User-Agent를 제거하고 접근할 가능성이 있음
+         * 3. NullPointerException 방지를 통한 서버 안정성 확보
+         * 4. 비정상적인 요청 패턴 감지를 위한 로깅 목적
+         */
+        if (userAgent == null) {
+            log.info("설명");
+            // 1. 자동화된 도구나 봇: 웹 스크래퍼, API 테스트 도구(Postman 등), 또는 일부 봇은 User-Agent 헤더를 설정하지 않고 요청을 보낼 가능성
+            // 2. 보안 도구 사용: 일부 사용자는 프라이버시 보호를 위해 User-Agent를 숨기거나 제거하는 브라우저 확장 프로그램이나 프록시를 사용할 가능성
+        }
+
+        // 모바일 환경과 웹 환경 구분
+        boolean isMobileDevice = isMobileDevice(userAgent);
+        log.info("디바이스 타입: {}", isMobileDevice ? "모바일" : "웹");
+
+        // 웹 환경: 관리자 계정은 해당 페이지로, DRIVER는 DRIVER 앱 안내 페이지로, 나머지는 USER 앱 안내 페이지로
+        if (!isMobileDevice) {
+            if (isAdmin) {
+                log.info("웹 사용자(총관리자) - 웹 대시보드로 리다이렉트");
                 return UriComponentsBuilder
                         .fromUriString("/admin/dashboard")
                         .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
+            } else if (isDriver) {
+                // DRIVER는 DRIVER 앱 다운로드 안내 페이지로
+                log.info("웹 환경에서 DRIVER 로그인 - DRIVER 앱 다운로드 안내 페이지로 리다이렉트");
+                return UriComponentsBuilder
+                        .fromUriString("/app-download/driver")
+                        .build(false)
+                        .toUriString();
+            } else {
+                // GUEST, USER는 USER 앱 다운로드 안내 페이지로
+                log.info("웹 환경에서 {}(GUEST/USER) 로그인 - USER 앱 다운로드 안내 페이지로 리다이렉트", roleStr);
+                return UriComponentsBuilder
+                        .fromUriString("/app-download/user")
+                        .build(false)
+                        .toUriString();
             }
-        } else {
-            // 그 외는 웹으로 간주
-            log.info("웹 로그인 감지");
+        }
+        // 모바일 환경: DRIVER는 DRIVER 앱으로, 나머지 모든 역할은 USER 앱으로
+        else {
+            String appSchemeUri;
+
+            if (isDriver) {
+                // DRIVER 역할은 DRIVER 앱으로 리다이렉트
+                appSchemeUri = userAgent.contains("Android") ?
+                        DRIVER_ANDROID_APP_SCHEME_URL : DRIVER_IOS_APP_SCHEME_URL;
+                log.info("모바일 환경에서 DRIVER 로그인 - DRIVER 앱으로 리다이렉트");
+            } else {
+                // 다른 모든 역할(GUEST, USER, ADMIN)은 USER 앱으로 리다이렉트
+                appSchemeUri = userAgent.contains("Android") ?
+                        ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
+                log.info("모바일 환경에서 {} 로그인 - USER 앱으로 리다이렉트", roleStr);
+            }
+
+            log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
+
+            // 앱 스킴 URL에 토큰 추가하여 리다이렉트
             return UriComponentsBuilder
-                    .fromUriString("/admin/dashboard")
+                    .fromUriString(appSchemeUri)
                     .queryParam("token", encodedToken)
                     .build(false)
                     .toUriString();
         }
+    }
 
-        // 리다이렉트 URL 생성
-        return UriComponentsBuilder
-                .fromUriString(appSchemeUri)
-                .queryParam("token", encodedToken)
-                .build(false)  // URL 인코딩 비활성화 (이미 인코딩했으므로)
-                .toUriString();
+    /**
+     * User-Agent로 모바일 디바이스 여부 확인
+     */
+    private boolean isMobileDevice(String userAgent) {
+        if (userAgent == null) {
+            return false;
+        }
+        return userAgent.contains("Android") ||
+                userAgent.contains("iPhone") ||
+                userAgent.contains("iPad") ||
+                userAgent.contains("iPod");
     }
 }
