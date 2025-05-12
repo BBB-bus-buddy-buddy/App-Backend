@@ -132,7 +132,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         boolean isMobileDevice = isMobileDevice(userAgent);
         log.info("디바이스 타입: {}", isMobileDevice ? "모바일" : "웹");
 
-        // 웹 환경: 관리자 계정은 해당 페이지로, 다른 계정은 앱 안내 페이지로
+        // 웹 환경: 관리자 계정은 해당 페이지로, DRIVER는 DRIVER 앱 안내 페이지로, 나머지는 USER 앱 안내 페이지로
         if (!isMobileDevice) {
             if (isAdmin) {
                 log.info("웹 사용자(총관리자) - 웹 대시보드로 리다이렉트");
@@ -141,14 +141,18 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                         .queryParam("token", encodedToken)
                         .build(false)
                         .toUriString();
-            } else {
-                // 앱 사용자(GUEST, USER, DRIVER)의 웹 로그인 - 앱 다운로드 안내
-                String role = isDriver ? "driver" : "user";
-                log.info("웹 환경에서 앱 사용자({}) 로그인 - 앱 다운로드 안내 페이지로 리다이렉트", role);
+            } else if (isDriver) {
+                // DRIVER는 DRIVER 앱 다운로드 안내 페이지로
+                log.info("웹 환경에서 DRIVER 로그인 - DRIVER 앱 다운로드 안내 페이지로 리다이렉트");
                 return UriComponentsBuilder
-                        .fromUriString("/app-download")
-                        .queryParam("role", role)
-                        .queryParam("token", encodedToken)
+                        .fromUriString("/app-download/driver")
+                        .build(false)
+                        .toUriString();
+            } else {
+                // GUEST, USER는 USER 앱 다운로드 안내 페이지로
+                log.info("웹 환경에서 {}(GUEST/USER) 로그인 - USER 앱 다운로드 안내 페이지로 리다이렉트", roleStr);
+                return UriComponentsBuilder
+                        .fromUriString("/app-download/user")
                         .build(false)
                         .toUriString();
             }
