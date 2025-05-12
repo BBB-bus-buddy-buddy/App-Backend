@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /**
  * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
@@ -32,8 +34,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final TokenService tokenService;
 
     // 앱 스킴 URL 정의
-    private static final String DRIVER_IOS_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
-    private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://auth/oauth2callback";
+    private static final String DRIVER_IOS_APP_SCHEME_URL = "org.reactjs.native.example.BBB-driver://oauth2callback";
+    private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://oauth2callback";
     private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.Busbuddybuddy://oauth2callback";
     private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
     private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
@@ -70,7 +72,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
             // 디바이스 타입 감지 및 역할 기반 리다이렉션 처리
             String userAgent = request.getHeader("User-Agent");
-            String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication);
+            boolean isDriverApp = false;
+
+            String redirectUrl = determineRedirectUrl(userAgent, accessToken, authentication, isDriverApp);
 
             // CORS 헤더 설정
             response.setHeader("Access-Control-Allow-Origin", "*");
@@ -91,7 +95,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
      * - 웹 환경: ADMIN은 관리자 페이지로, 다른 역할은 앱 안내 페이지로
      * - 앱 환경: DRIVER는 DRIVER 앱으로, ADMIN은 USER 앱으로 리다이렉트
      */
-    private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication) throws IOException {
+    private String determineRedirectUrl(String userAgent, String accessToken, Authentication authentication, boolean isDriverApp) throws IOException {
         // 토큰 URL 인코딩
         String encodedToken = URLEncoder.encode(accessToken, StandardCharsets.UTF_8.toString());
 
@@ -161,16 +165,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         else {
             String appSchemeUri;
 
-            if (isDriver) {
-                // DRIVER 역할은 DRIVER 앱으로 리다이렉트
+            if (isDriverApp) {
                 appSchemeUri = userAgent.contains("Android") ?
                         DRIVER_ANDROID_APP_SCHEME_URL : DRIVER_IOS_APP_SCHEME_URL;
-                log.info("모바일 환경에서 DRIVER 로그인 - DRIVER 앱으로 리다이렉트");
-            } else {
-                // 다른 모든 역할(GUEST, USER, ADMIN)은 USER 앱으로 리다이렉트
+                log.info("드라이버 앱에서 로그인 - 드라이버 앱으로 리다이렉트");
+            }
+            // 드라이버가 아닌 앱에서의 요청이면 사용자 앱으로 리다이렉트
+            else {
                 appSchemeUri = userAgent.contains("Android") ?
                         ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
-                log.info("모바일 환경에서 {} 로그인 - USER 앱으로 리다이렉트", roleStr);
+                log.info("사용자 앱에서 로그인 - 사용자ㄴ 앱으로 리다이렉트");
             }
 
             log.info("결정된 앱 스킴 URI: {}", appSchemeUri);
