@@ -24,6 +24,7 @@ public class UserCreator {
                 .email(attributes.getEmail())
                 .myStations(list)
                 .role(Role.GUEST)
+                .organizationId("")
                 .build();
     }
 }
