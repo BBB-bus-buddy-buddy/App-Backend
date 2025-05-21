@@ -2,9 +2,12 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.CodeRequestDTO;
+import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
+import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
+import capston2024.bustracker.service.DriverService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.Map;
 
 /**
@@ -27,9 +31,10 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final DriverService driverService;
 
     @GetMapping("/user")
-    public ResponseEntity<ApiResponse<Map<String,Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
         log.info("Received request for user details. Principal: {}", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
@@ -71,22 +76,81 @@ public class AuthController {
         }
     }
 
+    /**
+     * 일반 사용자 → 인증된 사용자 등급 승급
+     */
     @PostMapping("/rankUp")
-    public ResponseEntity<ApiResponse<Boolean>> rankUpUser(@AuthenticationPrincipal OAuth2User principal, @RequestBody CodeRequestDTO codeRequestDTO){
-        log.info("사용자 권한 승급 요청 - 코드: {}", codeRequestDTO.getCode());
+    public ResponseEntity<ApiResponse<Boolean>> rankUpUser(
+            @AuthenticationPrincipal OAuth2User principal,
+            @RequestBody CodeRequestDTO requestDTO) {
+
+        log.info("사용자 권한 승급 요청 - 코드: {}", requestDTO.getCode());
 
         if (principal == null) {
-            log.warn("No authenticated user found");
+            log.warn("인증된 사용자를 찾을 수 없음");
             throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
         }
 
-        boolean isRankUp = authService.rankUpGuestToUser(principal, codeRequestDTO.getCode());
+        boolean isRankUp = authService.rankUpGuestToUser(principal, requestDTO.getCode());
 
         if (isRankUp) {
             return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 사용자 등급이 업그레이드되었습니다."));
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ApiResponse<>(false, "잘못된 인증 코드입니다."));
+        }
+    }
+
+    @PostMapping("/driver-verify-and-rankup")
+    public ResponseEntity<ApiResponse<Boolean>> verifyDriverLicenseAndRankUp(
+            @AuthenticationPrincipal OAuth2User principal,
+            @RequestBody LicenseVerifyRequestDto requestDto) {
+
+        log.info("운전면허 검증 및 권한 업그레이드 요청");
+
+        if (principal == null) {
+            log.warn("인증된 사용자를 찾을 수 없음");
+            throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
+        }
+
+        try {
+            // 1. 운전면허 검증
+            Map<String, String> verificationResult = driverService.verifyLicense(requestDto);
+
+            String authenticity = verificationResult.get("resAuthenticity");
+            if (!"1".equals(authenticity) && !"2".equals(authenticity)) {
+                log.warn("운전면허 검증 실패: {}", verificationResult.get("resAuthenticityDesc1"));
+                return ResponseEntity.badRequest().body(
+                        new ApiResponse<>(false, verificationResult.get("resAuthenticityDesc1"))
+                );
+            }
+
+            // 2. 권한 업그레이드
+            // 고정값인 organization 값 사용
+            String organizationCode = driverService.getDefaultOrganization();
+
+            boolean isRankUp = authService.rankUpGuestToDriver(principal, organizationCode, requestDto);
+
+            if (isRankUp) {
+                return ResponseEntity.ok(
+                        new ApiResponse<>(true, "운전면허 검증 및 권한 업그레이드가 완료되었습니다.")
+                );
+            } else {
+                return ResponseEntity.badRequest().body(
+                        new ApiResponse<>(false, "권한 업그레이드에 실패했습니다.")
+                );
+            }
+
+        } catch (BusinessException e) {
+            log.error("운전면허 검증 및 권한 업그레이드 중 비즈니스 오류 발생: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(
+                    new ApiResponse<>(false, e.getMessage())
+            );
+        } catch (Exception e) {
+            log.error("운전면허 검증 및 권한 업그레이드 중 오류 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiResponse<>(false, "처리 중 오류가 발생했습니다.")
+            );
         }
     }
 
