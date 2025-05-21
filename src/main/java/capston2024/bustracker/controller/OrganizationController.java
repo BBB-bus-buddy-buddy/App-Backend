@@ -60,3 +60,17 @@ public class OrganizationController {
             throw e; // 전역 예외 핸들러가 처리하도록 다시 throw
         }
     }
+
+    /**
+     * 모든 조직 목록을 조회하는 API
+     *
+     * @return 모든 조직 목록
+     */
+    @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<java.util.List<Organization>>> getAllOrganizations() {
+        log.info("모든 조직 목록 조회 요청");
+        java.util.List<Organization> organizations = organizationService.getAllOrganizations();
+        return ResponseEntity.ok(new ApiResponse<>(organizations, "조직 목록을 성공적으로 조회했습니다."));
+    }
+}
