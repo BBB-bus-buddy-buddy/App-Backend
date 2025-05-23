@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Objects;
 
 /**
  * OAuth2 로그인 성공 후 처리를 담당하는 핸들러
@@ -78,6 +79,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 appType = state.substring(state.indexOf("__app:") + 6);
             }
 
+            log.info("userAgent = {}", userAgent);
             log.info("appType = {}", appType);
             boolean isDriverApp = appType != null && appType.equals("driver");
 
@@ -163,8 +165,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             }
             // 드라이버가 아닌 앱에서의 요청이면 사용자 앱으로 리다이렉트
             else {
-                appSchemeUri = userAgent.contains("Android") ?
-                        ANDROID_APP_SCHEME_URI : IOS_APP_SCHEME_URI;
+                appSchemeUri = Objects.requireNonNull(userAgent).contains("iPhone")
+                         ? IOS_APP_SCHEME_URI : ANDROID_APP_SCHEME_URI;
                 log.info("사용자 앱에서 로그인 - 사용자 앱으로 리다이렉트");
             }
 
