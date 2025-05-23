@@ -1,5 +1,6 @@
 package capston2024.bustracker.service;
 
+import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.Organization;
 import capston2024.bustracker.domain.User;
@@ -292,5 +293,40 @@ public class AuthService {
                 "role", user.getRoleKey(),
                 "organizationId", user.getOrganizationId()
         );
+    }
+
+    /**
+     * 운전자 권한으로 업그레이드
+     * @param principal OAuth2User
+     * @param organizationCode 조직 코드
+     * @param requestDto 운전자 추가 정보
+     * @return 업그레이드 성공 여부
+     */
+    @Transactional
+    public boolean rankUpGuestToDriver(OAuth2User principal, String organizationCode, LicenseVerifyRequestDto requestDto) {
+        User user = getUserFromPrincipal(principal);
+        if (user == null) {
+            throw new RuntimeException("존재하지 않는 회원입니다.");
+        }
+
+        // 이미 DRIVER 권한을 갖고 있는 경우
+        if (user.getRole() == Role.DRIVER) {
+            log.info("이미 DRIVER 권한이 있는 사용자입니다: {}", user.getEmail());
+            return true;
+        }
+
+        // 조직 존재 여부 확인
+        Organization organization = organizationService.getOrganization(organizationCode);
+
+        // 운전자 추가 정보 저장 (필요한 경우 별도 엔티티 생성)
+        // TODO: 운전자 면허 정보 등 추가 데이터 저장 로직 구현
+
+        // DRIVER 권한으로 업그레이드
+        user.updateRole(Role.DRIVER);
+        user.setOrganizationId(organization.getId());
+        userRepository.save(user);
+
+        log.info("사용자 권한이 DRIVER로 업그레이드되었습니다: {}", user.getEmail());
+        return true;
     }
 }
