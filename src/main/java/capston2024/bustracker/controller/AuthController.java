@@ -2,7 +2,10 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.CodeRequestDTO;
+import capston2024.bustracker.config.dto.DriverUpgradeRequestDTO;
 import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
+import capston2024.bustracker.domain.Driver;
+import capston2024.bustracker.domain.auth.DriverCreator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -10,6 +13,7 @@ import capston2024.bustracker.service.AuthService;
 import capston2024.bustracker.service.DriverService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -18,6 +22,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -32,6 +37,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final DriverService driverService;
+    private final DriverCreator driverCreator;
 
     @GetMapping("/user")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
@@ -98,6 +104,52 @@ public class AuthController {
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ApiResponse<>(false, "잘못된 인증 코드입니다."));
+        }
+    }
+
+    @PostMapping("/upgrade-to-driver")
+    public ResponseEntity<ApiResponse<Driver>> upgradeToDriver(
+            @AuthenticationPrincipal OAuth2User principal,
+            @Valid @RequestBody DriverUpgradeRequestDTO request) {
+
+        log.info("드라이버 업그레이드 요청 - Principal: {}", principal);
+
+        if (principal == null) {
+            log.warn("인증된 사용자를 찾을 수 없음");
+            throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
+        }
+
+        try {
+            // AuthService를 통해 사용자 정보 가져오기
+            Map<String, Object> userDetails = authService.getUserDetails(principal);
+            String userId = (String) userDetails.get("email");
+
+            if (userId == null) {
+                throw new UnauthorizedException("사용자 이메일을 확인할 수 없습니다");
+            }
+
+            log.info("드라이버 업그레이드 요청 - 사용자 email: {}", userId);
+
+            // 게스트를 드라이버로 업그레이드
+            Driver driver = driverCreator.upgradeGuestToDriver(userId, request);
+
+            return ResponseEntity.ok(
+                    new ApiResponse<>(driver, "드라이버 등록이 완료되었습니다.")
+            );
+
+        } catch (UnauthorizedException e) {
+            log.error("인증 오류: {}", e.getMessage());
+            throw e; // ExceptionHandler가 처리하도록 re-throw
+        } catch (BusinessException e) {
+            log.error("드라이버 업그레이드 중 비즈니스 오류 발생: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(
+                    new ApiResponse<>(null, e.getMessage())
+            );
+        } catch (Exception e) {
+            log.error("드라이버 업그레이드 중 오류 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ApiResponse<>(null, "드라이버 등록 처리 중 오류가 발생했습니다.")
+            );
         }
     }
 
