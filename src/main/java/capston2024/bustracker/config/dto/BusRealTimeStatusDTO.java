@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class BusRealTimeStatusDTO {
     private String busNumber;           // 버스 번호
+    private String busRealNumber;       // 실제 버스 번호 (운영자가 지정하는 번호)
     private String routeName;           // 노선 이름
     private String organizationId;      // 조직 ID
     private double latitude;            // 위도
@@ -23,4 +24,5 @@ public class BusRealTimeStatusDTO {
     private long lastUpdateTime;        // 마지막 업데이트 시간
     private int currentStationIndex;    // 현재 정류장 인덱스
     private int totalStations;          // 전체 정류장 수
+    private boolean isOperate;          // 운행 여부
 }

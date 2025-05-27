@@ -20,10 +20,19 @@ public interface BusRepository extends MongoRepository<Bus, String> {
     // 버스 번호와 조직 ID로 버스 조회
     Optional<Bus> findByBusNumberAndOrganizationId(String busNumber, String organizationId);
 
+    // 실제 버스 번호와 조직 ID로 버스 조회
+    Optional<Bus> findByBusRealNumberAndOrganizationId(String busRealNumber, String organizationId);
+
+    // 실제 버스 번호 중복 체크 (조직 내)
+    boolean existsByBusRealNumberAndOrganizationId(String busRealNumber, String organizationId);
+
+    // 운행 중인 버스만 조회
+    List<Bus> findByOrganizationIdAndIsOperateTrue(String organizationId);
+
     // 라우트 ID로 버스 조회
     @Query("{'routeId.$id': ?0}")
     List<Bus> findByRouteId(String routeId);
 
-    // 특정 정류장을 경유하는 버스 조회 (RouteId를 통해 외부에서 구현)
-    // 기존 findByStationsContaining(Station station) 삭제
+    // 운행 상태별 버스 조회
+    List<Bus> findByOrganizationIdAndIsOperate(String organizationId, boolean isOperate);
 }

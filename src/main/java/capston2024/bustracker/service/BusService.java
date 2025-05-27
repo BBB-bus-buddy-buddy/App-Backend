@@ -1,4 +1,3 @@
-
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
@@ -43,7 +42,7 @@ public class BusService {
     private final KakaoApiService kakaoApiService;
 
     // 버스 위치 업데이트 큐
-    private final Map<String, BusRealTimeLocationDTO> pendingLocationUpdates = new ConcurrentHashMap<String, BusRealTimeLocationDTO>();
+    private final Map<String, BusRealTimeLocationDTO> pendingLocationUpdates = new ConcurrentHashMap<>();
 
     @Autowired
     public BusService(
@@ -52,7 +51,9 @@ public class BusService {
             StationRepository stationRepository,
             MongoOperations mongoOperations,
             BusNumberGenerator busNumberGenerator,
-            ApplicationEventPublisher eventPublisher, RouteService routeService, KakaoApiService kakaoApiService) {
+            ApplicationEventPublisher eventPublisher,
+            RouteService routeService,
+            KakaoApiService kakaoApiService) {
         this.busRepository = busRepository;
         this.routeRepository = routeRepository;
         this.stationRepository = stationRepository;
@@ -97,9 +98,19 @@ public class BusService {
             throw new BusinessException("다른 조직의 라우트에 버스를 등록할 수 없습니다.");
         }
 
+        // 실제 버스 번호 중복 체크 (같은 조직 내에서)
+        if (busRegisterDTO.getBusRealNumber() != null && !busRegisterDTO.getBusRealNumber().trim().isEmpty()) {
+            String trimmedRealNumber = busRegisterDTO.getBusRealNumber().trim();
+            if (busRepository.existsByBusRealNumberAndOrganizationId(trimmedRealNumber, organizationId)) {
+                throw new BusinessException("같은 조직 내에서 이미 사용 중인 실제 버스 번호입니다: " + trimmedRealNumber);
+            }
+        }
+
         // 새 버스 생성 (ID는 MongoDB가 자동 생성)
         Bus bus = Bus.builder()
                 .organizationId(organizationId)
+                .busRealNumber(busRegisterDTO.getBusRealNumber() != null ?
+                        busRegisterDTO.getBusRealNumber().trim() : null)
                 .totalSeats(busRegisterDTO.getTotalSeats())
                 .occupiedSeats(0)
                 .availableSeats(busRegisterDTO.getTotalSeats())
@@ -107,6 +118,7 @@ public class BusService {
                 .routeId(new DBRef("routes", route.getId()))
                 .timestamp(Instant.now())
                 .prevStationIdx(0) // 초기값은 첫 번째 정류장
+                .isOperate(busRegisterDTO.isOperate()) // 운행 여부 설정
                 .build();
 
         // 저장하여 ID 획득
@@ -119,6 +131,7 @@ public class BusService {
         List<String> existingBusNumbers = getAllBusesByOrganizationId(organizationId)
                 .stream()
                 .map(Bus::getBusNumber)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         // 번호가 중복되는 경우 재생성 (최대 10회 시도)
@@ -136,7 +149,8 @@ public class BusService {
         bus.setBusNumber(busNumber);
         busRepository.save(bus);
 
-        log.info("새로운 버스가 등록되었습니다: ID={}, 번호={}, 조직={}", bus.getId(), busNumber, organizationId);
+        log.info("새로운 버스가 등록되었습니다: ID={}, 번호={}, 실제번호={}, 조직={}, 운행여부={}",
+                bus.getId(), busNumber, bus.getBusRealNumber(), organizationId, bus.isOperate());
 
         // 버스 등록 후 상태 업데이트 이벤트 발생
         broadcastBusStatusUpdate(bus);
@@ -151,7 +165,8 @@ public class BusService {
     public boolean removeBus(String busNumber, String organizationId) {
         Bus bus = getBusByNumberAndOrganization(busNumber, organizationId);
         busRepository.delete(bus);
-        log.info("버스가 삭제되었습니다: 번호={}, 조직={}", busNumber, organizationId);
+        log.info("버스가 삭제되었습니다: 번호={}, 실제번호={}, 조직={}",
+                busNumber, bus.getBusRealNumber(), organizationId);
         return true;
     }
 
@@ -167,8 +182,35 @@ public class BusService {
         // 버스 존재 확인
         Bus bus = getBusByNumberAndOrganization(busInfoUpdateDTO.getBusNumber(), organizationId);
 
+        // 실제 버스 번호 수정
+        if (busInfoUpdateDTO.getBusRealNumber() != null) {
+            String newRealNumber = busInfoUpdateDTO.getBusRealNumber().trim();
+
+            // 다른 버스가 같은 실제 번호를 사용하고 있는지 확인
+            if (!newRealNumber.isEmpty()) {
+                boolean realNumberExists = getAllBusesByOrganizationId(organizationId)
+                        .stream()
+                        .anyMatch(b -> !b.getBusNumber().equals(bus.getBusNumber()) &&
+                                b.getBusRealNumber() != null &&
+                                b.getBusRealNumber().equals(newRealNumber));
+
+                if (realNumberExists) {
+                    throw new BusinessException("같은 조직 내에서 이미 사용 중인 실제 버스 번호입니다: " + newRealNumber);
+                }
+            }
+
+            bus.setBusRealNumber(newRealNumber.isEmpty() ? null : newRealNumber);
+        }
+
+        // 운행 여부 수정
+        if (busInfoUpdateDTO.getIsOperate() != null) {
+            bus.setOperate(busInfoUpdateDTO.getIsOperate());
+        }
+
         // 라우트 변경이 있는 경우
-        if (busInfoUpdateDTO.getRouteId() != null && !busInfoUpdateDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
+        if (busInfoUpdateDTO.getRouteId() != null &&
+                !busInfoUpdateDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
+
             Route route = routeRepository.findById(busInfoUpdateDTO.getRouteId())
                     .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busInfoUpdateDTO.getRouteId()));
 
@@ -203,7 +245,8 @@ public class BusService {
         // 변경사항을 클라이언트에게 브로드캐스트
         broadcastBusStatusUpdate(bus);
 
-        log.info("버스가 수정되었습니다: 번호={}, 조직={}", bus.getBusNumber(), organizationId);
+        log.info("버스가 수정되었습니다: 번호={}, 실제번호={}, 조직={}, 운행여부={}",
+                bus.getBusNumber(), bus.getBusRealNumber(), organizationId, bus.isOperate());
         return true;
     }
 
@@ -225,10 +268,49 @@ public class BusService {
     }
 
     /**
+     * 실제 버스 번호와 조직으로 특정 버스 조회
+     */
+    public Bus getBusByRealNumberAndOrganization(String busRealNumber, String organizationId) {
+        return busRepository.findByBusRealNumberAndOrganizationId(busRealNumber, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        String.format("실제 버스 번호로 버스를 찾을 수 없습니다: 실제번호=%s, 조직=%s", busRealNumber, organizationId)));
+    }
+
+    /**
      * 조직 ID로 모든 버스 조회
      */
     public List<Bus> getAllBusesByOrganizationId(String organizationId) {
         return busRepository.findByOrganizationId(organizationId);
+    }
+
+    /**
+     * 운행 중인 버스만 조회
+     */
+    public List<BusRealTimeStatusDTO> getOperatingBusesByOrganizationId(String organizationId) {
+        List<Bus> operatingBuses = busRepository.findByOrganizationIdAndIsOperateTrue(organizationId);
+        return operatingBuses.stream()
+                .map(this::convertToStatusDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 운행 상태별 버스 조회
+     */
+    public List<BusRealTimeStatusDTO> getBusesByOperationStatus(String organizationId, boolean isOperate) {
+        List<Bus> buses = busRepository.findByOrganizationIdAndIsOperate(organizationId, isOperate);
+        return buses.stream()
+                .map(this::convertToStatusDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 실제 버스 번호 중복 확인
+     */
+    public boolean isRealNumberDuplicate(String busRealNumber, String organizationId) {
+        if (busRealNumber == null || busRealNumber.trim().isEmpty()) {
+            return false;
+        }
+        return busRepository.existsByBusRealNumberAndOrganizationId(busRealNumber.trim(), organizationId);
     }
 
     /**
@@ -313,6 +395,7 @@ public class BusService {
                 log.warn("도착 시간 예측 실패: {}", e.getMessage());
             }
         }
+
         log.info("최종 정류장 결과 {}", resultStations);
         return resultStations;
     }
@@ -337,6 +420,12 @@ public class BusService {
                 boardingDTO.getBusNumber(), boardingDTO.getUserId(), boardingDTO.getAction());
 
         Bus bus = getBusByNumberAndOrganization(boardingDTO.getBusNumber(), boardingDTO.getOrganizationId());
+
+        // 운행 중지된 버스인지 확인
+        if (!bus.isOperate()) {
+            log.warn("버스 {} 탑승/하차 실패: 운행이 중지된 버스입니다", boardingDTO.getBusNumber());
+            return false;
+        }
 
         if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD) {
             // 탑승 처리
@@ -446,6 +535,7 @@ public class BusService {
         // 상태 DTO 생성
         BusRealTimeStatusDTO statusDTO = new BusRealTimeStatusDTO();
         statusDTO.setBusNumber(bus.getBusNumber());
+        statusDTO.setBusRealNumber(bus.getBusRealNumber()); // 새 필드
         statusDTO.setRouteName(routeName);
         statusDTO.setOrganizationId(bus.getOrganizationId());
         statusDTO.setLatitude(bus.getLocation() != null ? bus.getLocation().getY() : 0);
@@ -457,6 +547,7 @@ public class BusService {
         statusDTO.setLastUpdateTime(bus.getTimestamp() != null ? bus.getTimestamp().toEpochMilli() : System.currentTimeMillis());
         statusDTO.setCurrentStationIndex(bus.getPrevStationIdx());
         statusDTO.setTotalStations(totalStations);
+        statusDTO.setOperate(bus.isOperate()); // 새 필드
 
         return statusDTO;
     }
@@ -496,9 +587,11 @@ public class BusService {
 
         BusSeatDTO busSeatDTO = new BusSeatDTO();
         busSeatDTO.setBusNumber(bus.getBusNumber());
+        busSeatDTO.setBusRealNumber(bus.getBusRealNumber()); // 새 필드
         busSeatDTO.setAvailableSeats(bus.getAvailableSeats());
         busSeatDTO.setOccupiedSeats(bus.getOccupiedSeats());
         busSeatDTO.setTotalSeats(bus.getTotalSeats());
+        busSeatDTO.setOperate(bus.isOperate()); // 새 필드
 
         return busSeatDTO;
     }
@@ -529,6 +622,12 @@ public class BusService {
                 if (existingBus == null) {
                     log.warn("위치 업데이트 실패: 버스를 찾을 수 없음: {}, 조직: {}",
                             update.getBusNumber(), update.getOrganizationId());
+                    continue;
+                }
+
+                // 운행 중지된 버스인 경우 위치 업데이트 건너뛰기
+                if (!existingBus.isOperate()) {
+                    log.debug("운행 중지된 버스 위치 업데이트 건너뛰기: {}", update.getBusNumber());
                     continue;
                 }
 
@@ -624,6 +723,7 @@ public class BusService {
 
         return nearestStation;
     }
+
     /**
      * 두 위치 사이의 거리 계산 (Haversine 공식)
      */

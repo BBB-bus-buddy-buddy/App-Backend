@@ -269,6 +269,95 @@ public class BusController {
     }
 
     /**
+     * 실제 버스 번호로 버스 조회
+     */
+    @GetMapping("/real-number/{busRealNumber}")
+    public ResponseEntity<ApiResponse<BusRealTimeStatusDTO>> getBusByRealNumber(
+            @PathVariable String busRealNumber,
+            @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String organizationId = (String) userInfo.get("organizationId");
+
+        if (organizationId == null || organizationId.isEmpty()) {
+            throw new BusinessException("조직에 속하지 않은 사용자는 버스를 조회할 수 없습니다.");
+        }
+
+        log.info("실제 버스 번호로 버스 조회 요청 - 실제 번호: {}, 조직: {}", busRealNumber, organizationId);
+
+        Bus bus = busService.getBusByRealNumberAndOrganization(busRealNumber, organizationId);
+        List<BusRealTimeStatusDTO> allBuses = busService.getAllBusStatusByOrganizationId(organizationId);
+
+        BusRealTimeStatusDTO busStatus = allBuses.stream()
+                .filter(dto -> dto.getBusRealNumber() != null && dto.getBusRealNumber().equals(busRealNumber))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("실제 버스 번호로 버스를 찾을 수 없습니다: " + busRealNumber));
+
+        return ResponseEntity.ok(new ApiResponse<>(busStatus, "버스가 성공적으로 조회되었습니다."));
+    }
+
+    /**
+     * 운행 중인 버스만 조회
+     */
+    @GetMapping("/operating")
+    public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getOperatingBuses(
+            @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String organizationId = (String) userInfo.get("organizationId");
+
+        if (organizationId == null || organizationId.isEmpty()) {
+            throw new BusinessException("조직에 속하지 않은 사용자는 버스를 조회할 수 없습니다.");
+        }
+
+        log.info("운행 중인 버스 목록 조회 요청 - 조직: {}", organizationId);
+        List<BusRealTimeStatusDTO> operatingBuses = busService.getOperatingBusesByOrganizationId(organizationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(operatingBuses, "운행 중인 버스가 성공적으로 조회되었습니다."));
+    }
+
+    /**
+     * 버스 운행 상태 변경
+     */
+    @PutMapping("/{busNumber}/operate")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<ApiResponse<Boolean>> toggleBusOperation(
+            @PathVariable String busNumber,
+            @RequestParam boolean isOperate,
+            @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 버스 운행 상태를 변경할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String organizationId = (String) userInfo.get("organizationId");
+
+        if (organizationId == null || organizationId.isEmpty()) {
+            throw new BusinessException("조직에 속하지 않은 사용자는 버스 운행 상태를 변경할 수 없습니다.");
+        }
+
+        log.info("버스 운행 상태 변경 요청 - 버스 번호: {}, 조직: {}, 운행상태: {}", busNumber, organizationId, isOperate);
+
+        BusInfoUpdateDTO updateDTO = new BusInfoUpdateDTO();
+        updateDTO.setBusNumber(busNumber);
+        updateDTO.setIsOperate(isOperate);
+
+        boolean result = busService.modifyBus(updateDTO, organizationId);
+
+        String message = isOperate ? "버스 운행이 시작되었습니다." : "버스 운행이 중지되었습니다.";
+        return ResponseEntity.ok(new ApiResponse<>(result, message));
+    }
+
+    /**
      * 비즈니스 로직 예외 처리
      */
     @ExceptionHandler(BusinessException.class)
