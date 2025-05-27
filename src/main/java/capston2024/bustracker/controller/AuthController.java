@@ -7,10 +7,15 @@ import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.domain.Driver;
 import capston2024.bustracker.domain.auth.DriverCreator;
 import capston2024.bustracker.exception.BusinessException;
-import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
 import capston2024.bustracker.service.DriverService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -25,14 +30,11 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 웹 MVC의 컨트롤러 역할
- * 계정 정보 유효성 검사 및 인증 관련 API 제공
- */
 @RestController
 @Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
+@Tag(name = "인증 관리", description = "사용자 인증, 로그인/로그아웃, 권한 승급 등을 관리하는 API")
 public class AuthController {
 
     private final AuthService authService;
@@ -40,7 +42,16 @@ public class AuthController {
     private final DriverCreator driverCreator;
 
     @GetMapping("/user")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
+    @Operation(
+            summary = "현재 로그인한 사용자 정보 조회",
+            description = "JWT 토큰을 통해 인증된 현재 사용자의 상세 정보를 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
         log.info("Received request for user details. Principal: {}", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
@@ -52,16 +63,34 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
+    @Operation(
+            summary = "로그아웃",
+            description = "현재 로그인한 사용자를 로그아웃 처리합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그아웃 성공")
+    })
+    public ResponseEntity<ApiResponse<Boolean>> logout(
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
         authService.logout(request, response);
         return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
     }
 
     @PostMapping("/withdrawal")
+    @Operation(
+            summary = "회원 탈퇴",
+            description = "현재 로그인한 사용자의 회원 탈퇴를 처리합니다. 권한이 GUEST로 변경되고 조직 정보가 초기화됩니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "탈퇴 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "처리 중 오류")
+    })
     public ResponseEntity<ApiResponse<Boolean>> withdrawal(
-            @AuthenticationPrincipal OAuth2User principal,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
 
         log.info("회원탈퇴 요청 - Principal: {}", principal);
 
@@ -73,7 +102,6 @@ public class AuthController {
         boolean isSuccess = authService.withdrawUser(principal);
 
         if (isSuccess) {
-            // 회원탈퇴 성공 후 로그아웃 처리
             authService.logout(request, response);
             return ResponseEntity.ok(new ApiResponse<>(true, "회원탈퇴가 성공적으로 처리되었습니다."));
         } else {
@@ -82,12 +110,19 @@ public class AuthController {
         }
     }
 
-    /**
-     * 일반 사용자 → 인증된 사용자 등급 승급
-     */
     @PostMapping("/rankUp")
+    @Operation(
+            summary = "일반 사용자 권한 승급",
+            description = "GUEST 권한을 가진 사용자가 조직 코드를 입력하여 USER 권한으로 승급합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "승급 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 인증 코드"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
     public ResponseEntity<ApiResponse<Boolean>> rankUpUser(
-            @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "조직 인증 코드", required = true)
             @RequestBody CodeRequestDTO requestDTO) {
 
         log.info("사용자 권한 승급 요청 - 코드: {}", requestDTO.getCode());
@@ -108,8 +143,19 @@ public class AuthController {
     }
 
     @PostMapping("/upgrade-to-driver")
+    @Operation(
+            summary = "운전자 권한 업그레이드",
+            description = "일반 사용자가 운전면허 정보를 제출하여 DRIVER 권한으로 업그레이드합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "업그레이드 성공",
+                    content = @Content(schema = @Schema(implementation = Driver.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
     public ResponseEntity<ApiResponse<Driver>> upgradeToDriver(
-            @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운전자 업그레이드 정보", required = true)
             @Valid @RequestBody DriverUpgradeRequestDTO request) {
 
         log.info("드라이버 업그레이드 요청 - Principal: {}", principal);
@@ -120,7 +166,6 @@ public class AuthController {
         }
 
         try {
-            // AuthService를 통해 사용자 정보 가져오기
             Map<String, Object> userDetails = authService.getUserDetails(principal);
             String userId = (String) userDetails.get("email");
 
@@ -130,7 +175,6 @@ public class AuthController {
 
             log.info("드라이버 업그레이드 요청 - 사용자 email: {}", userId);
 
-            // 게스트를 드라이버로 업그레이드
             Driver driver = driverCreator.upgradeGuestToDriver(userId, request);
 
             return ResponseEntity.ok(
@@ -139,7 +183,7 @@ public class AuthController {
 
         } catch (UnauthorizedException e) {
             log.error("인증 오류: {}", e.getMessage());
-            throw e; // ExceptionHandler가 처리하도록 re-throw
+            throw e;
         } catch (BusinessException e) {
             log.error("드라이버 업그레이드 중 비즈니스 오류 발생: {}", e.getMessage());
             return ResponseEntity.badRequest().body(
@@ -154,8 +198,18 @@ public class AuthController {
     }
 
     @PostMapping("/driver-verify-and-rankup")
+    @Operation(
+            summary = "운전면허 검증 및 드라이버 권한 승급",
+            description = "운전면허 진위를 확인하고 검증에 성공하면 자동으로 DRIVER 권한으로 승급합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "검증 및 승급 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "검증 실패 또는 잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
     public ResponseEntity<ApiResponse<Boolean>> verifyDriverLicenseAndRankUp(
-            @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운전면허 검증 정보", required = true)
             @RequestBody LicenseVerifyRequestDto requestDto) {
 
         log.info("운전면허 검증 및 권한 업그레이드 요청");
@@ -178,7 +232,6 @@ public class AuthController {
             }
 
             // 2. 권한 업그레이드
-            // 고정값인 organization 값 사용
             String organizationCode = driverService.getDefaultOrganization();
 
             boolean isRankUp = authService.rankUpGuestToDriver(principal, organizationCode, requestDto);
@@ -204,19 +257,5 @@ public class AuthController {
                     new ApiResponse<>(false, "처리 중 오류가 발생했습니다.")
             );
         }
-    }
-
-    @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<ApiResponse<Boolean>> handleUnauthorizedException(UnauthorizedException ex) {
-        log.error("인가되지 않은 리소스: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new ApiResponse<>(false, ex.getMessage()));
-    }
-
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ApiResponse<Boolean>> handleResourceNotFoundException(ResourceNotFoundException ex) {
-        log.error("찾을 수 없는 리소스: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiResponse<>(false, ex.getMessage()));
     }
 }
