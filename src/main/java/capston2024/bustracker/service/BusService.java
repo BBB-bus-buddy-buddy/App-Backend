@@ -11,8 +11,9 @@ import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.RouteRepository;
 import capston2024.bustracker.repository.StationRepository;
 import com.mongodb.DBRef;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class BusService {
     private static final double STATION_RADIUS = 120.0; // 120미터 반경으로 직접 설정
 
@@ -44,66 +46,24 @@ public class BusService {
     // 버스 위치 업데이트 큐
     private final Map<String, BusRealTimeLocationDTO> pendingLocationUpdates = new ConcurrentHashMap<>();
 
-    @Autowired
-    public BusService(
-            BusRepository busRepository,
-            RouteRepository routeRepository,
-            StationRepository stationRepository,
-            MongoOperations mongoOperations,
-            BusNumberGenerator busNumberGenerator,
-            ApplicationEventPublisher eventPublisher,
-            RouteService routeService,
-            KakaoApiService kakaoApiService) {
-        this.busRepository = busRepository;
-        this.routeRepository = routeRepository;
-        this.stationRepository = stationRepository;
-        this.mongoOperations = mongoOperations;
-        this.busNumberGenerator = busNumberGenerator;
-        this.eventPublisher = eventPublisher;
-        this.kakaoApiService = kakaoApiService;
-    }
-
     /**
      * 버스 상태 업데이트 이벤트
      */
-    public static class BusStatusUpdateEvent {
-        private final String organizationId;
-        private final BusRealTimeStatusDTO busStatus;
-
-        public BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) {
-            this.organizationId = organizationId;
-            this.busStatus = busStatus;
-        }
-
-        public String getOrganizationId() {
-            return organizationId;
-        }
-
-        public BusRealTimeStatusDTO getBusStatus() {
-            return busStatus;
-        }
-    }
+    @Getter
+    public record BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) { }
 
     /**
      * 버스 등록
      */
     @Transactional
     public String createBus(BusRegisterDTO busRegisterDTO, String organizationId) {
-        // 라우트 존재 확인
+        // 노선 존재 확인
         Route route = routeRepository.findById(busRegisterDTO.getRouteId())
-                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busRegisterDTO.getRouteId()));
+                .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 노선입니다: " + busRegisterDTO.getRouteId()));
 
-        // 요청한 조직과 라우트의 조직이 일치하는지 확인
+        // 요청한 조직과 노선의 조직이 일치하는지 확인
         if (!route.getOrganizationId().equals(organizationId)) {
-            throw new BusinessException("다른 조직의 라우트에 버스를 등록할 수 없습니다.");
-        }
-
-        // 실제 버스 번호 중복 체크 (같은 조직 내에서)
-        if (busRegisterDTO.getBusRealNumber() != null && !busRegisterDTO.getBusRealNumber().trim().isEmpty()) {
-            String trimmedRealNumber = busRegisterDTO.getBusRealNumber().trim();
-            if (busRepository.existsByBusRealNumberAndOrganizationId(trimmedRealNumber, organizationId)) {
-                throw new BusinessException("같은 조직 내에서 이미 사용 중인 실제 버스 번호입니다: " + trimmedRealNumber);
-            }
+            throw new BusinessException("다른 조직의 노선에 버스를 등록할 수 없습니다.");
         }
 
         // 새 버스 생성 (ID는 MongoDB가 자동 생성)
@@ -149,7 +109,7 @@ public class BusService {
         bus.setBusNumber(busNumber);
         busRepository.save(bus);
 
-        log.info("새로운 버스가 등록되었습니다: ID={}, 번호={}, 실제번호={}, 조직={}, 운행여부={}",
+        log.info("새로운 버스가 등록되었습니다: ID={}, 번호={}, 실제 버스번호={}, 조직={}, 운행여부={}",
                 bus.getId(), busNumber, bus.getBusRealNumber(), organizationId, bus.isOperate());
 
         // 버스 등록 후 상태 업데이트 이벤트 발생
@@ -185,20 +145,6 @@ public class BusService {
         // 실제 버스 번호 수정
         if (busInfoUpdateDTO.getBusRealNumber() != null) {
             String newRealNumber = busInfoUpdateDTO.getBusRealNumber().trim();
-
-            // 다른 버스가 같은 실제 번호를 사용하고 있는지 확인
-            if (!newRealNumber.isEmpty()) {
-                boolean realNumberExists = getAllBusesByOrganizationId(organizationId)
-                        .stream()
-                        .anyMatch(b -> !b.getBusNumber().equals(bus.getBusNumber()) &&
-                                b.getBusRealNumber() != null &&
-                                b.getBusRealNumber().equals(newRealNumber));
-
-                if (realNumberExists) {
-                    throw new BusinessException("같은 조직 내에서 이미 사용 중인 실제 버스 번호입니다: " + newRealNumber);
-                }
-            }
-
             bus.setBusRealNumber(newRealNumber.isEmpty() ? null : newRealNumber);
         }
 
@@ -207,16 +153,16 @@ public class BusService {
             bus.setOperate(busInfoUpdateDTO.getIsOperate());
         }
 
-        // 라우트 변경이 있는 경우
+        // 노선 변경이 있는 경우
         if (busInfoUpdateDTO.getRouteId() != null &&
                 !busInfoUpdateDTO.getRouteId().equals(bus.getRouteId().getId().toString())) {
 
             Route route = routeRepository.findById(busInfoUpdateDTO.getRouteId())
-                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 라우트입니다: " + busInfoUpdateDTO.getRouteId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 노선입니다: " + busInfoUpdateDTO.getRouteId()));
 
-            // 같은 조직의 라우트인지 확인
+            // 같은 조직의 노선인지 확인
             if (!route.getOrganizationId().equals(organizationId)) {
-                throw new BusinessException("다른 조직의 라우트로 변경할 수 없습니다.");
+                throw new BusinessException("다른 조직의 노선으로 변경할 수 없습니다.");
             }
 
             bus.setRouteId(new DBRef("routes", route.getId()));
@@ -329,14 +275,14 @@ public class BusService {
 
         // 버스의 라우트 ID 확인
         if (bus.getRouteId() == null) {
-            throw new BusinessException("버스에 할당된 라우트가 없습니다.");
+            throw new BusinessException("버스에 할당된 노선이햣 ㄴ 없습니다.");
         }
 
         String routeId = bus.getRouteId().getId().toString();
 
-        // 라우트 조회
+        // 노선 조회
         Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new ResourceNotFoundException("해당 ID의 라우트를 찾을 수 없습니다: " + routeId));
+                .orElseThrow(() -> new ResourceNotFoundException("해당 ID의 노선을 찾을 수 없습니다: " + routeId));
 
         // 조직 ID 확인
         if (!route.getOrganizationId().equals(organizationId)) {
