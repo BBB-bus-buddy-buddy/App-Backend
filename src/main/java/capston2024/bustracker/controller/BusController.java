@@ -4,6 +4,8 @@ import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.config.dto.bus.BusCreateDTO;
 import capston2024.bustracker.config.dto.bus.BusStatusDTO;
 import capston2024.bustracker.config.dto.bus.BusUpdateDTO;
+import capston2024.bustracker.config.dto.busEtc.BusRouteInfoDTO;
+import capston2024.bustracker.config.dto.busEtc.StationBusDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
@@ -302,5 +304,43 @@ public class BusController {
         boolean result = busService.removeBus(busNumber, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(result, "성공적으로 버스가 삭제되었습니다."));
+    }
+
+
+    @GetMapping("/station/{stationId}")
+    @Operation(
+            summary = "특정 정류장을 경유하는 버스 조회",
+            description = "특정 정류장을 경유하는 모든 운행 중인 버스의 실시간 정보를 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "정류장을 찾을 수 없음")
+    })
+    public ResponseEntity<ApiResponse<List<StationBusDTO>>> getBusesByStation(
+            @Parameter(description = "정류장 ID", required = true) @PathVariable String stationId) {
+
+        log.info("정류장 {}을 경유하는 버스 조회 요청", stationId);
+        List<StationBusDTO> buses = busService.getBusesByStation(stationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(buses, "정류장을 경유하는 버스가 성공적으로 조회되었습니다."));
+    }
+
+    @GetMapping("/{busNumber}/route-info")
+    @Operation(
+            summary = "버스 노선 정보 및 현재 위치 조회",
+            description = "특정 버스의 노선 정보, 현재 위치, 다음 정류장까지의 시간을 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    public ResponseEntity<ApiResponse<BusRouteInfoDTO>> getBusRouteInfo(
+            @Parameter(description = "버스 번호", required = true) @PathVariable String busNumber,
+            @Parameter(description = "조직 ID", required = false) @RequestParam(required = false) String organizationId) {
+
+        log.info("버스 {} 노선 정보 조회 요청", busNumber);
+        BusRouteInfoDTO routeInfo = busService.getBusRouteInfo(busNumber, organizationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(routeInfo, "버스 노선 정보가 성공적으로 조회되었습니다."));
     }
 }
