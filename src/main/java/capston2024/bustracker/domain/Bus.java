@@ -13,83 +13,51 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 import java.time.LocalDateTime;
 
-@Document(collection = "Bus")
-@Getter @Setter
-@AllArgsConstructor
-@NoArgsConstructor
+@Document(collection = "buses")
+@Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Bus {
-
     @Id
     private String id;
 
-    @Indexed(unique = true)
-    private String busNumber;
+    private String busNumber;           // 시스템 생성 버스 번호
+    private String busRealNumber;       // 실제 버스 번호 (선택사항)
+    private String organizationId;      // 조직 ID
+    private int totalSeats;            // 총 좌석 수
+    private DBRef routeId;             // 노선 참조
 
-    private String busRealNumber;
+    // 운영 상태
+    private OperationalStatus operationalStatus = OperationalStatus.ACTIVE;
+    private ServiceStatus serviceStatus = ServiceStatus.NOT_IN_SERVICE;
 
-    @NonNull
-    private String organizationId;
+    // 위치 정보 (실시간 업데이트)
+    private GeoJsonPoint location;      // 현재 위치
+    private Instant lastLocationUpdate; // 마지막 위치 업데이트 시간
 
-    private int totalSeats;
+    // 운행 정보 (Bus에서 관리하는 현재 상태)
+    private String currentStationName;  // 현재 정류장명
+    private Integer prevStationIdx;     // 이전 정류장 인덱스
+    private String prevStationId;       // 이전 정류장 ID
+    private Instant lastStationTime;    // 마지막 정류장 도착 시간
 
-    private DBRef routeId;  // 기본 할당 라우트
-
-    // 실시간 위치 정보
-    @GeoSpatialIndexed(type = GeoSpatialIndexType.GEO_2DSPHERE)
-    private GeoJsonPoint location;
-
-    // 마지막 위치 업데이트 시간
-    private Instant lastLocationUpdate;
-
-    // 이전 정류장 인덱스 (라우트 상에서의 위치)
-    private Integer prevStationIdx;
-
-    // 새로운 상태 관리 필드
-    private OperationalStatus operationalStatus;  // 운영 상태
-    private ServiceStatus serviceStatus;          // 서비스 상태
-
-    @LastModifiedDate
+    // 생성/수정 시간
+    private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // 운영 상태 enum
     public enum OperationalStatus {
-        ACTIVE,      // 활성 (운영 가능)
-        INACTIVE,    // 비활성 (일시 중단)
-        MAINTENANCE, // 정비 중
+        ACTIVE,      // 활성
+        INACTIVE,    // 비활성
+        MAINTENANCE, // 정비중
         RETIRED      // 퇴역
     }
 
-    // 서비스 상태 enum
     public enum ServiceStatus {
-        NOT_IN_SERVICE,  // 비운행
-        IN_SERVICE,      // 운행 중
-        OUT_OF_ORDER,    // 고장
-        CLEANING         // 청소 중
-    }
-
-    /**
-     * 위치 업데이트
-     */
-    public void updateLocation(double latitude, double longitude) {
-        this.location = new GeoJsonPoint(longitude, latitude);
-        this.lastLocationUpdate = Instant.now();
-    }
-
-    /**
-     * 이전 정류장 인덱스 업데이트
-     */
-    public void updatePrevStationIdx(int stationIdx) {
-        this.prevStationIdx = stationIdx;
-    }
-
-    /**
-     * 운행 가능 여부 확인
-     */
-    public boolean isOperational() {
-        return this.operationalStatus == OperationalStatus.ACTIVE &&
-                (this.serviceStatus == ServiceStatus.NOT_IN_SERVICE ||
-                        this.serviceStatus == ServiceStatus.IN_SERVICE);
+        NOT_IN_SERVICE, // 운행 전
+        IN_SERVICE,     // 운행 중
+        OUT_OF_ORDER,   // 고장
+        CLEANING        // 청소 중
     }
 
     @Override

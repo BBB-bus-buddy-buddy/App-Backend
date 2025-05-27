@@ -35,4 +35,24 @@ public interface RouteRepository extends MongoRepository<Route, String> {
     boolean existsByRouteName(String routeName);
 
     Optional<Route> findByRouteNameAndOrganizationId(String routeName, String organizationId);
+
+    /**
+     * 특정 정류장을 포함하는 노선들 조회
+     */
+    @Query("{ 'stations.stationId.$id': ?0 }")
+    List<Route> findByStationsStationId(String stationId);
+
+    /**
+     * 특정 조직의 특정 정류장을 포함하는 노선들 조회
+     */
+    @Query("{ 'organizationId': ?0, 'stations.stationId.$id': ?1 }")
+    List<Route> findByOrganizationIdAndStationsStationId(String organizationId, String stationId);
+
+    /**
+     * 여러 정류장을 포함하는 노선들 조회
+     */
+    @Query("{ 'stations.stationId.$id': { $in: ?0 } }")
+    List<Route> findByStationsStationIdIn(List<String> stationIds);
+
+
 }

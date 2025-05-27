@@ -1,6 +1,7 @@
 package capston2024.bustracker.repository;
 
 import capston2024.bustracker.domain.Bus;
+import com.mongodb.DBRef;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -43,4 +44,27 @@ public interface BusRepository extends MongoRepository<Bus, String> {
 
     // 운영 가능한 버스만 조회
     List<Bus> findByOrganizationIdAndOperationalStatusIn(String organizationId, List<Bus.OperationalStatus> statuses);
+
+    /**
+     * 특정 노선에 할당된 버스들 조회 (DBRef 사용)
+     */
+    List<Bus> findByRouteId(DBRef routeId);
+
+    /**
+     * 여러 노선에 할당된 버스들 조회
+     */
+    @Query("{ 'routeId.$id': { $in: ?0 } }")
+    List<Bus> findByRouteIdIn(List<String> routeIds);
+
+    /**
+     * 조직별로 특정 노선에 할당된 버스들 조회
+     */
+    @Query("{ 'organizationId': ?0, 'routeId.$id': ?1 }")
+    List<Bus> findByOrganizationIdAndRouteId(String organizationId, String routeId);
+
+    /**
+     * 현재 운행 중인 버스들 조회 (operationalStatus = ACTIVE, serviceStatus = IN_SERVICE)
+     */
+    @Query("{ 'organizationId': ?0, 'operationalStatus': 'ACTIVE', 'serviceStatus': 'IN_SERVICE' }")
+    List<Bus> findActiveOperatingBusesByOrganizationId(String organizationId);
 }

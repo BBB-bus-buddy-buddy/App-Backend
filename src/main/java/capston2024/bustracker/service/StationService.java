@@ -2,7 +2,11 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.RouteDTO;
 import capston2024.bustracker.config.dto.StationRequestDTO;
+import capston2024.bustracker.config.dto.busEtc.BusArrivalEstimateResponseDTO;
+import capston2024.bustracker.config.dto.busEtc.DriverLocationUpdateDTO;
+import capston2024.bustracker.config.dto.busEtc.StationBusDTO;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.BusOperation;
 import capston2024.bustracker.domain.Route;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
@@ -18,10 +22,7 @@ import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +32,7 @@ public class StationService {
 
     private final StationRepository stationRepository;
     private final RouteRepository routeRepository;
+    private final KakaoApiService kakaoApiService;
 
 
     // 정류장 이름으로 검색
@@ -137,5 +139,25 @@ public class StationService {
         // 정류장 삭제
         stationRepository.delete(station);
         log.info("정류장 {}가 삭제되었습니다.", id);
+    }
+
+    // ✅ 새로 추가된 메소드
+
+    /**
+     * 특정 버스가 특정 정류장에 도착할 예상 시간 계산
+     */
+    public BusArrivalEstimateResponseDTO getArrivalEstimate(String busNumber, String stationId) {
+        try {
+            log.info("버스 {} -> 정류장 {} 도착 시간 계산", busNumber, stationId);
+            return kakaoApiService.getMultiWaysTimeEstimate(busNumber, stationId);
+        } catch (Exception e) {
+            log.error("도착 시간 계산 실패: 버스={}, 정류장={}", busNumber, stationId, e);
+
+            // 실패 시 기본값 반환
+            return BusArrivalEstimateResponseDTO.builder()
+                    .estimatedTime("--분 --초")
+                    .waypoints(Collections.emptyList())
+                    .build();
+        }
     }
 }

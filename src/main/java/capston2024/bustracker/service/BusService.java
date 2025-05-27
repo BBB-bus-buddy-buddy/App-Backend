@@ -3,21 +3,25 @@ package capston2024.bustracker.service;
 import capston2024.bustracker.config.dto.bus.BusCreateDTO;
 import capston2024.bustracker.config.dto.bus.BusStatusDTO;
 import capston2024.bustracker.config.dto.bus.BusUpdateDTO;
+import capston2024.bustracker.config.dto.busEtc.*;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.BusOperation;
 import capston2024.bustracker.domain.Route;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.utils.BusNumberGenerator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusOperationRepository;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.RouteRepository;
+import capston2024.bustracker.repository.StationRepository;
 import com.mongodb.DBRef;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -29,8 +33,11 @@ public class BusService {
 
     private final BusRepository busRepository;
     private final RouteRepository routeRepository;
+    private final StationRepository stationRepository;
     private final BusOperationRepository busOperationRepository;
     private final BusNumberGenerator busNumberGenerator;
+    private final RealtimeLocationService realtimeLocationService;
+    private final KakaoApiService kakaoApiService;
 
     /**
      * 버스 등록 (정적 정보만)
@@ -300,5 +307,241 @@ public class BusService {
         }
 
         return busNumber;
+    }
+
+    /**
+     * 특정 정류장을 경유하는 모든 운행 중인 버스 조회
+     */
+    public List<StationBusDTO> getBusesByStation(String stationId) {
+        log.info("정류장 {}을 경유하는 버스 조회", stationId);
+
+        // 1. 해당 정류장을 포함하는 모든 노선 찾기
+        List<Route> routes = routeRepository.findByStationsStationId(new DBRef("stations", stationId));
+
+        List<StationBusDTO> stationBuses = new ArrayList<>();
+
+        for (Route route : routes) {
+            // 2. 각 노선에 할당된 버스들 중 현재 운행 중인 버스 찾기
+            List<Bus> routeBuses = busRepository.findByRouteId(route.getId());
+
+            for (Bus bus : routeBuses) {
+                // 3. 현재 진행 중인 운행 찾기
+                List<BusOperation> activeOperations = busOperationRepository.findByBusIdAndStatusIn(
+                        bus.getId(),
+                        List.of(BusOperation.OperationStatus.IN_PROGRESS)
+                );
+
+                if (!activeOperations.isEmpty()) {
+                    BusOperation operation = activeOperations.get(0);
+
+                    // 4. 실시간 위치 정보 가져오기
+                    DriverLocationUpdateDTO realtimeLocation = realtimeLocationService.getCurrentLocation(operation.getOperationId());
+
+                    if (realtimeLocation != null) {
+                        // 5. 해당 정류장까지의 도착 예상 시간 계산
+                        String estimatedTime = calculateArrivalTime(bus.getBusNumber(), stationId);
+
+                        StationBusDTO stationBus = StationBusDTO.builder()
+                                .busNumber(bus.getBusNumber())
+                                .busRealNumber(bus.getBusRealNumber())
+                                .routeName(route.getRouteName())
+                                .organizationId(bus.getOrganizationId())
+                                .latitude(realtimeLocation.getLatitude())
+                                .longitude(realtimeLocation.getLongitude())
+                                .totalSeats(bus.getTotalSeats())
+                                .currentPassengers(realtimeLocation.getCurrentPassengers())
+                                .availableSeats(bus.getTotalSeats() - realtimeLocation.getCurrentPassengers())
+                                .currentStationName(getCurrentStationName(bus))
+                                .operationId(operation.getOperationId())
+                                .isOperating(true)
+                                .lastUpdateTime(realtimeLocation.getTimestamp())
+                                .estimatedArrivalTime(estimatedTime)
+                                .build();
+
+                        stationBuses.add(stationBus);
+                    }
+                }
+            }
+        }
+
+        // 6. 도착 예상 시간순으로 정렬
+        stationBuses.sort((a, b) -> {
+            if ("--분 --초".equals(a.getEstimatedArrivalTime())) return 1;
+            if ("--분 --초".equals(b.getEstimatedArrivalTime())) return -1;
+            return a.getEstimatedArrivalTime().compareTo(b.getEstimatedArrivalTime());
+        });
+
+        return stationBuses;
+    }
+
+    /**
+     * 특정 버스의 노선 정보 및 현재 위치 조회
+     */
+    public BusRouteInfoDTO getBusRouteInfo(String busNumber, String organizationId) {
+        log.info("버스 {} 노선 정보 조회", busNumber);
+
+        // 1. 버스 정보 조회
+        Bus bus;
+        if (organizationId != null) {
+            bus = busRepository.findByBusNumberAndOrganizationId(busNumber, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + busNumber));
+        } else {
+            bus = busRepository.findByBusNumber(busNumber)
+                    .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + busNumber));
+        }
+
+        // 2. 현재 진행 중인 운행 찾기
+        List<BusOperation> activeOperations = busOperationRepository.findByBusIdAndStatusIn(
+                bus.getId(),
+                List.of(BusOperation.OperationStatus.IN_PROGRESS)
+        );
+
+        if (activeOperations.isEmpty()) {
+            throw new ResourceNotFoundException("버스 " + busNumber + "의 진행 중인 운행이 없습니다.");
+        }
+
+        BusOperation operation = activeOperations.getFirst();
+
+        // 3. 실시간 위치 정보 가져오기
+        DriverLocationUpdateDTO realtimeLocation = realtimeLocationService.getCurrentLocation(operation.getOperationId());
+        if (realtimeLocation == null) {
+            throw new ResourceNotFoundException("버스 " + busNumber + "의 실시간 위치 정보가 없습니다.");
+        }
+
+        // 4. 노선 정보 조회
+        Route route = routeRepository.findById(bus.getRouteId().getId().toString())
+                .orElseThrow(() -> new ResourceNotFoundException("노선 정보를 찾을 수 없습니다."));
+
+        // 5. 현재 버스 위치와 정류장들의 정보 구성
+        List<BusStationDTO> allStations = buildStationList(route, bus);
+
+        // 6. 현재 정류장과 다음 정류장 찾기
+        BusStationDTO currentStation = findCurrentStation(allStations);
+        BusStationDTO nextStation = findNextStation(allStations);
+
+        // 7. 다음 정류장까지의 시간 계산
+        String estimatedTimeToNext = "--분 --초";
+        int remainingSeconds = 0;
+
+        if (nextStation != null) {
+            try {
+                BusArrivalEstimateResponseDTO estimate = kakaoApiService.getMultiWaysTimeEstimate(
+                        busNumber, nextStation.getId());
+                estimatedTimeToNext = estimate.getEstimatedTime();
+                remainingSeconds = parseTimeToSeconds(estimatedTimeToNext);
+            } catch (Exception e) {
+                log.warn("다음 정류장까지의 시간 계산 실패: {}", e.getMessage());
+            }
+        }
+
+        return BusRouteInfoDTO.builder()
+                .busNumber(bus.getBusNumber())
+                .busRealNumber(bus.getBusRealNumber())
+                .routeName(route.getRouteName())
+                .organizationId(bus.getOrganizationId())
+                .latitude(realtimeLocation.getLatitude())
+                .longitude(realtimeLocation.getLongitude())
+                .currentStation(currentStation)
+                .nextStation(nextStation)
+                .estimatedTimeToNext(estimatedTimeToNext)
+                .remainingSecondsToNext(remainingSeconds)
+                .allStations(allStations)
+                .totalSeats(bus.getTotalSeats())
+                .currentPassengers(realtimeLocation.getCurrentPassengers())
+                .availableSeats(bus.getTotalSeats() - realtimeLocation.getCurrentPassengers())
+                .operationId(operation.getOperationId())
+                .isOperating(true)
+                .lastUpdateTime(realtimeLocation.getTimestamp())
+                .build();
+    }
+
+    // Helper methods
+
+    private String calculateArrivalTime(String busNumber, String stationId) {
+        try {
+            BusArrivalEstimateResponseDTO estimate = kakaoApiService.getMultiWaysTimeEstimate(busNumber, stationId);
+            return estimate.getEstimatedTime();
+        } catch (Exception e) {
+            log.warn("도착 시간 계산 실패: 버스={}, 정류장={}, 오류={}", busNumber, stationId, e.getMessage());
+            return "--분 --초";
+        }
+    }
+
+    private String getCurrentStationName(Bus bus) {
+        if (bus.getCurrentStationName() != null) {
+            return bus.getCurrentStationName();
+        }
+        return "정보 없음";
+    }
+
+    private List<BusStationDTO> buildStationList(Route route, Bus bus) {
+        List<BusStationDTO> stations = new ArrayList<>();
+        int currentStationIndex = bus.getPrevStationIdx() != null ? bus.getPrevStationIdx() : -1;
+
+        for (int i = 0; i < route.getStations().size(); i++) {
+            Route.RouteStation routeStation = route.getStations().get(i);
+            String stationId = routeStation.getStationId().getId().toString();
+
+            Station station = stationRepository.findById(stationId).orElse(null);
+            if (station != null) {
+                boolean isPassed = i <= currentStationIndex;
+                boolean isCurrent = i == currentStationIndex + 1; // 다음 정류장이 현재 향하고 있는 곳
+
+                BusStationDTO stationDTO = BusStationDTO.builder()
+                        .id(station.getId())
+                        .name(station.getName())
+                        .latitude(station.getLocation().getX())
+                        .longitude(station.getLocation().getY())
+                        .sequence(routeStation.getSequence())
+                        .isPassed(isPassed)
+                        .isCurrentStation(isCurrent)
+                        .estimatedArrivalTime(isPassed ? "통과" : calculateArrivalTime(bus.getBusNumber(), stationId))
+                        .build();
+
+                stations.add(stationDTO);
+            }
+        }
+
+        return stations;
+    }
+
+    private BusStationDTO findCurrentStation(List<BusStationDTO> stations) {
+        return stations.stream()
+                .filter(BusStationDTO::isCurrentStation)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private BusStationDTO findNextStation(List<BusStationDTO> stations) {
+        for (int i = 0; i < stations.size(); i++) {
+            if (stations.get(i).isCurrentStation() && i + 1 < stations.size()) {
+                return stations.get(i + 1);
+            }
+        }
+        return null;
+    }
+
+    private int parseTimeToSeconds(String timeString) {
+        if ("--분 --초".equals(timeString)) {
+            return 0;
+        }
+
+        try {
+            String[] parts = timeString.split(" ");
+            int minutes = 0, seconds = 0;
+
+            for (String part : parts) {
+                if (part.contains("분")) {
+                    minutes = Integer.parseInt(part.replace("분", ""));
+                } else if (part.contains("초")) {
+                    seconds = Integer.parseInt(part.replace("초", ""));
+                }
+            }
+
+            return minutes * 60 + seconds;
+        } catch (Exception e) {
+            log.warn("시간 파싱 실패: {}", timeString);
+            return 0;
+        }
     }
 }
