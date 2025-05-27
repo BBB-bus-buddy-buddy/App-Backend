@@ -44,7 +44,7 @@ public class KakaoApiService {
      * @return 예상 소요 시간 및 경유지 정보
      */
     public BusArrivalEstimateResponseDTO getMultiWaysTimeEstimate(String busNumber, String stationId) {
-        Bus bus = busRepository.findBusByBusNumber(busNumber)
+        Bus bus = busRepository.findByBusNumber(busNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("존재하지 않는 버스 입니다: " + busNumber));
 
         Station targetStation = stationRepository.findById(stationId)
