@@ -1,4 +1,4 @@
-package capston2024.bustracker.config.dto;
+package capston2024.bustracker.config.dto.busEtc;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
