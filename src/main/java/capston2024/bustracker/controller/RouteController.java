@@ -3,6 +3,7 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.RouteDTO;
 import capston2024.bustracker.config.dto.RouteRequestDTO;
+import capston2024.bustracker.config.dto.RouteUpdateRequestDTO;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -120,7 +121,7 @@ public class RouteController {
     @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<RouteDTO>> updateRoute(
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody RouteRequestDTO requestDTO) {
+            @RequestBody RouteUpdateRequestDTO requestDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 수정할 수 있습니다.");
@@ -134,8 +135,8 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 수정할 수 없습니다.");
         }
 
-        log.info("라우트 수정 요청 - 이름: {}, 조직 ID: {}", requestDTO.getRouteName(), organizationId);
-        RouteDTO updatedRoute = routeService.updateRouteByNameAndOrganizationId(requestDTO.getRouteName(), organizationId, requestDTO);
+        log.info("라우트 수정 요청 - 이름: {}, 조직 ID: {}", requestDTO.getPrevRouteName(), organizationId);
+        RouteDTO updatedRoute = routeService.updateRouteByNameAndOrganizationId(organizationId, requestDTO);
         return ResponseEntity.ok(new ApiResponse<>(updatedRoute, "라우트가 성공적으로 수정되었습니다."));
     }
 

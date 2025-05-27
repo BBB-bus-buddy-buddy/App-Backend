@@ -2,6 +2,7 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.RouteDTO;
 import capston2024.bustracker.config.dto.RouteRequestDTO;
+import capston2024.bustracker.config.dto.RouteUpdateRequestDTO;
 import capston2024.bustracker.domain.Route;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
@@ -183,17 +184,17 @@ public class RouteService {
      * 라우트 이름과 조직 ID로 라우트 수정
      */
     @Transactional
-    public RouteDTO updateRouteByNameAndOrganizationId(String routeName, String organizationId, RouteRequestDTO requestDTO) {
-        log.info("라우트 이름 {} 및 조직 ID {} 기준으로 수정", routeName, organizationId);
+    public RouteDTO updateRouteByNameAndOrganizationId(String organizationId, RouteUpdateRequestDTO request) {
+        log.info("라우트 이름 {} 및 조직 ID {} 기준으로 수정", request.getPrevRouteName(), organizationId);
 
         // 라우트 이름과 조직 ID로 라우트 조회
-        Route route = routeRepository.findByRouteNameAndOrganizationId(routeName, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("해당 이름과 조직에 속한 라우트를 찾을 수 없습니다: " + routeName));
+        Route route = routeRepository.findByRouteNameAndOrganizationId(request.getPrevRouteName(), organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("해당 이름과 조직에 속한 라우트를 찾을 수 없습니다: " + request.getPrevRouteName()));
 
         // 정류장 정보 업데이트
-        if (requestDTO.getStations() != null) {
+        if (request.getStations() != null) {
             List<Route.RouteStation> routeStations = new ArrayList<>();
-            for (RouteRequestDTO.RouteStationRequestDTO stationDTO : requestDTO.getStations()) {
+            for (RouteUpdateRequestDTO.RouteStationRequestDTO stationDTO : request.getStations()) {
                 Station station = stationRepository.findById(stationDTO.getStationId())
                         .orElseThrow(() -> new ResourceNotFoundException("해당 ID의 정류장을 찾을 수 없습니다: " + stationDTO.getStationId()));
 
@@ -207,13 +208,13 @@ public class RouteService {
         }
 
         // 새 이름이 있으면 이름도 업데이트
-        if (requestDTO.getRouteName() != null && !requestDTO.getRouteName().equals(routeName)) {
+        if (request.getNewRouteName() != null && !request.getNewRouteName().equals(request.getPrevRouteName())) {
             // 변경할 이름이 이미 존재하는지 확인
-            routeRepository.findByRouteNameAndOrganizationId(requestDTO.getRouteName(), organizationId)
+            routeRepository.findByRouteNameAndOrganizationId(request.getNewRouteName(), organizationId)
                     .ifPresent(existingRoute -> {
                         throw new BusinessException(ErrorCode.DUPLICATE_ENTITY, "이미 같은 이름의 라우트가 존재합니다.");
                     });
-            route.setRouteName(requestDTO.getRouteName());
+            route.setRouteName(request.getNewRouteName());
         }
 
         Route updatedRoute = routeRepository.save(route);

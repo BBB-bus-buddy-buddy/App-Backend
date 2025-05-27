@@ -205,7 +205,7 @@ public class BusOperationService {
     /**
      * BusOperation 엔티티를 DTO로 변환
      */
-    BusOperationDTO convertToDTO(BusOperation operation) {
+    public BusOperationDTO convertToDTO(BusOperation operation) {
         // 버스 정보 조회
         String busNumber = "알 수 없음";
         String busRealNumber = null;
