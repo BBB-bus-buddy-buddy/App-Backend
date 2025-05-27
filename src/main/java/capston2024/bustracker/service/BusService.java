@@ -49,7 +49,6 @@ public class BusService {
     /**
      * 버스 상태 업데이트 이벤트
      */
-    @Getter
     public record BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) { }
 
     /**
