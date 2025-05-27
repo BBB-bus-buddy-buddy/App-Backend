@@ -3,47 +3,56 @@ package capston2024.bustracker.domain;
 import com.mongodb.DBRef;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.time.Instant;
-import java.util.List;
+import java.time.LocalDateTime;
 
 @Document(collection = "Bus")
 @Getter @Setter
-@AllArgsConstructor // 모든 필드를 받는 생성자 생성
-@NoArgsConstructor // 기본 생성자 생성
+@AllArgsConstructor
+@NoArgsConstructor
 @Builder
-@CompoundIndex(def = "{'location': '2dsphere'}")
 public class Bus {
 
     @Id
-    private String id; // MongoDB에서 자동 생성될 _id
+    private String id;
 
     @Indexed(unique = true)
-    private String busNumber; // 버스 ID에서 추출한 고유 번호 (3~6자리)
+    private String busNumber;
 
-    private String busRealNumber; // 실제 버스 번호 (운영자가 지정하는 번호)
+    private String busRealNumber;
 
     @NonNull
-    private String organizationId; // 조직 ID (필수)
+    private String organizationId;
 
-    private int totalSeats; // 전체 좌석
-    private int occupiedSeats; // 앉은 좌석 수
-    private int availableSeats; // 남은 좌석 수
-    private GeoJsonPoint location; // 좌표 정보 (GeoJSON 형식)
-    private DBRef routeId; // 버스의 노선(정류장들의 DBRef)
-    private Instant timestamp; // 위치 정보 최신화
+    private int totalSeats;
 
-    // 추가되는 필드들
-    private String prevStationId;  // 현재/마지막으로 지난 정류장 ID
-    private Instant lastStationTime;  // 마지막 정류장 통과 시간
-    private int prevStationIdx;  // 현재 정류장의 순서 (stations 리스트상의 인덱스)
+    private DBRef routeId;  // 기본 할당 라우트
 
-    // 새로 추가된 필드
-    private boolean isOperate; // 운행 여부 (true: 운행 중, false: 운행 중지)
+    // 새로운 상태 관리 필드
+    private OperationalStatus operationalStatus;  // 운영 상태
+    private ServiceStatus serviceStatus;          // 서비스 상태
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
+    // 운영 상태 enum
+    public enum OperationalStatus {
+        ACTIVE,      // 활성 (운영 가능)
+        INACTIVE,    // 비활성 (일시 중단)
+        MAINTENANCE, // 정비 중
+        RETIRED      // 퇴역
+    }
+
+    // 서비스 상태 enum
+    public enum ServiceStatus {
+        NOT_IN_SERVICE,  // 비운행
+        IN_SERVICE,      // 운행 중
+        OUT_OF_ORDER,    // 고장
+        CLEANING         // 청소 중
+    }
 
     @Override
     public String toString() {
@@ -52,9 +61,8 @@ public class Bus {
                 ", busNumber='" + busNumber + '\'' +
                 ", busRealNumber='" + busRealNumber + '\'' +
                 ", organizationId='" + organizationId + '\'' +
-                ", location=" + location +
-                ", timestamp=" + timestamp +
-                ", isOperate=" + isOperate +
+                ", operationalStatus=" + operationalStatus +
+                ", serviceStatus=" + serviceStatus +
                 '}';
     }
 }

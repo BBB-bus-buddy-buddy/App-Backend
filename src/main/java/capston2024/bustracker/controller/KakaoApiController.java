@@ -1,7 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.BusArrivalEstimateResponseDTO;
+import capston2024.bustracker.config.dto.busEtc.BusArrivalEstimateResponseDTO;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.service.KakaoApiService;
 import lombok.RequiredArgsConstructor;

@@ -1,6 +1,7 @@
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
+import capston2024.bustracker.config.dto.busEtc.BusArrivalEstimateResponseDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.Route;
 import capston2024.bustracker.domain.Station;

@@ -10,9 +10,10 @@ import java.util.Optional;
 
 @Repository
 public interface BusRepository extends MongoRepository<Bus, String> {
-    Optional<Bus> findByIdOrderByTimestampDesc(String id); // 버스 아이디로 버스 조회
-    Optional<Bus> findBusByBusNumber(String busNumber);
-    boolean existsBusByBusNumber(String busNumber); // 버스 번호 중복 감지
+
+    // 기본 조회 메서드들
+    Optional<Bus> findByBusNumber(String busNumber);
+    boolean existsByBusNumber(String busNumber);
 
     // 조직 ID로 버스 조회
     List<Bus> findByOrganizationId(String organizationId);
@@ -26,13 +27,20 @@ public interface BusRepository extends MongoRepository<Bus, String> {
     // 실제 버스 번호 중복 체크 (조직 내)
     boolean existsByBusRealNumberAndOrganizationId(String busRealNumber, String organizationId);
 
-    // 운행 중인 버스만 조회
-    List<Bus> findByOrganizationIdAndIsOperateTrue(String organizationId);
+    // 운영 상태별 버스 조회
+    List<Bus> findByOrganizationIdAndOperationalStatus(String organizationId, Bus.OperationalStatus operationalStatus);
+
+    // 서비스 상태별 버스 조회
+    List<Bus> findByOrganizationIdAndServiceStatus(String organizationId, Bus.ServiceStatus serviceStatus);
+
+    // 운영 가능한 버스 조회 (ACTIVE 상태)
+    List<Bus> findByOrganizationIdAndOperationalStatusAndServiceStatus(
+            String organizationId, Bus.OperationalStatus operationalStatus, Bus.ServiceStatus serviceStatus);
 
     // 라우트 ID로 버스 조회
     @Query("{'routeId.$id': ?0}")
     List<Bus> findByRouteId(String routeId);
 
-    // 운행 상태별 버스 조회
-    List<Bus> findByOrganizationIdAndIsOperate(String organizationId, boolean isOperate);
+    // 운영 가능한 버스만 조회
+    List<Bus> findByOrganizationIdAndOperationalStatusIn(String organizationId, List<Bus.OperationalStatus> statuses);
 }

@@ -1,7 +1,7 @@
 package capston2024.bustracker.handler;
 
-import capston2024.bustracker.config.dto.BusRealTimeLocationDTO;
-import capston2024.bustracker.service.BusService;
+import capston2024.bustracker.config.dto.busEtc.DriverLocationUpdateDTO;
+import capston2024.bustracker.service.RealtimeLocationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,101 +15,101 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 버스 기사 앱과의 WebSocket 통신을 처리하는 핸들러
- */
 @Component
 @Slf4j
 @RequiredArgsConstructor
 public class BusDriverWebSocketHandler extends TextWebSocketHandler {
 
-    private final BusService busService;
+    private final RealtimeLocationService realtimeLocationService;
     private final ObjectMapper objectMapper;
 
-    // 세션 관리를 위한 맵 (busNumber -> WebSocketSession)
+    // 세션 관리 (operationId -> WebSocketSession)
     private final Map<String, WebSocketSession> driverSessions = new ConcurrentHashMap<>();
-    // 세션 역매핑을 위한 맵 (sessionId -> busNumber)
-    private final Map<String, String> sessionToBusMap = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionToOperationMap = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        log.info("버스 기사 WebSocket 연결 설정: {}", session.getId());
-        // 이 시점에는 아직 어떤 버스 기사인지 모르므로, 메시지를 받을 때 맵핑함
+        log.info("기사 WebSocket 연결: {}", session.getId());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String sessionId = session.getId();
-        String busNumber = sessionToBusMap.remove(sessionId);
+        String operationId = sessionToOperationMap.remove(sessionId);
 
-        if (busNumber != null) {
-            driverSessions.remove(busNumber);
-            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 버스 번호 = {}", sessionId, busNumber);
-        } else {
-            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}", sessionId);
+        if (operationId != null) {
+            driverSessions.remove(operationId);
+            log.info("기사 WebSocket 연결 종료: 세션={}, 운행={}", sessionId, operationId);
         }
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        log.debug("버스 기사로부터 메시지 수신: {}", payload);
+        log.debug("기사 위치 데이터 수신: {}", payload);
 
         try {
-            BusRealTimeLocationDTO locationUpdate = objectMapper.readValue(payload, BusRealTimeLocationDTO.class);
-            String busNumber = locationUpdate.getBusNumber();
+            // JSON → DriverLocationUpdateDTO 변환
+            DriverLocationUpdateDTO locationUpdate = objectMapper.readValue(payload, DriverLocationUpdateDTO.class);
+            String operationId = locationUpdate.getOperationId();
 
-            // 세션 맵핑 등록 (처음 메시지를 보낼 때)
-            if (!sessionToBusMap.containsKey(session.getId())) {
-                sessionToBusMap.put(session.getId(), busNumber);
-                driverSessions.put(busNumber, session);
-                log.info("버스 기사 세션 등록: 버스 번호 = {}, 세션 ID = {}", busNumber, session.getId());
-            }
+            // 세션 등록 (최초 연결 시)
+            registerDriverSession(session, operationId);
 
-            // 위치 업데이트 처리
-            busService.updateBusLocation(locationUpdate);
+            // 실시간 위치 업데이트 처리
+            boolean success = realtimeLocationService.updateDriverLocation(locationUpdate);
 
-            // 성공 응답
-            sendMessage(session, Map.of(
-                    "status", "success",
-                    "message", "위치 업데이트가 성공적으로 처리되었습니다.",
-                    "timestamp", System.currentTimeMillis()
-            ));
+            // 기사 앱에 응답 전송
+            sendResponse(session, success, success ? "위치 업데이트 완료" : "위치 업데이트 실패");
 
         } catch (Exception e) {
-            log.error("버스 위치 업데이트 처리 중 오류 발생", e);
-            sendMessage(session, Map.of(
-                    "status", "error",
-                    "message", "위치 업데이트 처리 중 오류가 발생했습니다: " + e.getMessage(),
-                    "timestamp", System.currentTimeMillis()
-            ));
+            log.error("기사 위치 업데이트 처리 중 오류", e);
+            sendResponse(session, false, "처리 중 오류: " + e.getMessage());
         }
     }
 
-    @Override
-    public void handleTransportError(WebSocketSession session, Throwable exception) {
-        log.error("버스 기사 WebSocket 통신 오류: 세션 ID = {}", session.getId(), exception);
+    /**
+     * 기사 세션 등록
+     */
+    private void registerDriverSession(WebSocketSession session, String operationId) {
+        if (!sessionToOperationMap.containsKey(session.getId())) {
+            sessionToOperationMap.put(session.getId(), operationId);
+            driverSessions.put(operationId, session);
+            log.info("기사 세션 등록: 운행={}, 세션={}", operationId, session.getId());
+        }
     }
 
     /**
-     * 특정 버스 기사에게 메시지 전송
+     * 기사 앱에 응답 전송
      */
-    public void sendMessageToBusDriver(String busNumber, Object message) {
-        WebSocketSession session = driverSessions.get(busNumber);
+    private void sendResponse(WebSocketSession session, boolean success, String message) {
+        try {
+            Map<String, Object> response = Map.of(
+                    "status", success ? "success" : "error",
+                    "message", message,
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            String jsonResponse = objectMapper.writeValueAsString(response);
+            session.sendMessage(new TextMessage(jsonResponse));
+
+        } catch (IOException e) {
+            log.error("기사 앱 응답 전송 실패", e);
+        }
+    }
+
+    /**
+     * 특정 운행의 기사에게 메시지 전송 (서버에서 기사에게)
+     */
+    public void sendMessageToDriver(String operationId, Object message) {
+        WebSocketSession session = driverSessions.get(operationId);
         if (session != null && session.isOpen()) {
             try {
-                sendMessage(session, message);
+                String jsonMessage = objectMapper.writeValueAsString(message);
+                session.sendMessage(new TextMessage(jsonMessage));
             } catch (Exception e) {
-                log.error("버스 기사({})에게 메시지 전송 중 오류 발생", busNumber, e);
+                log.error("기사({})에게 메시지 전송 실패", operationId, e);
             }
         }
-    }
-
-    /**
-     * 세션에 메시지 전송 (내부 헬퍼 메서드)
-     */
-    private void sendMessage(WebSocketSession session, Object message) throws IOException {
-        String jsonMessage = objectMapper.writeValueAsString(message);
-        session.sendMessage(new TextMessage(jsonMessage));
     }
 }
