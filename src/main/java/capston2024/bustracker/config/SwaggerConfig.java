@@ -27,10 +27,6 @@ import java.util.List;
                         email = "support@bustracker.com"
                 )
         ),
-        servers = {
-                @Server(url = "http://localhost:8080", description = "개발 서버"),
-                @Server(url = "https://api.bustracker.com", description = "운영 서버")
-        },
         security = @SecurityRequirement(name = "bearerAuth")
 )
 @SecurityScheme(
@@ -56,54 +52,8 @@ public class SwaggerConfig {
                         new Tag().name("정류장 관리").description("버스 정류장 정보 관리 API"),
                         new Tag().name("좌석 정보").description("실시간 버스 좌석 정보 조회 API"),
                         new Tag().name("운전자 관리").description("버스 운전자 관련 API"),
-                        new Tag().name("직원 관리").description("조직 직원 인증 API"),
-                        new Tag().name("관리자").description("시스템 총관리자 전용 API"),
+                        new Tag().name("직원 관리").description("조직 관리자 직원 인증 API"),
                         new Tag().name("외부 API 연동").description("카카오 등 외부 API 연동")
                 ));
-    }
-
-    @Bean
-    public GroupedOpenApi publicApi() {
-        return GroupedOpenApi.builder()
-                .group("public-apis")
-                .displayName("공개 API")
-                .pathsToMatch("/api/auth/**", "/api/driver/verify", "/api/organization/verify")
-                .build();
-    }
-
-    @Bean
-    public GroupedOpenApi userApi() {
-        return GroupedOpenApi.builder()
-                .group("user-apis")
-                .displayName("사용자 API")
-                .pathsToMatch("/api/user/**", "/api/station/**", "/api/routes/**", "/api/seats/**")
-                .build();
-    }
-
-    @Bean
-    public GroupedOpenApi staffApi() {
-        return GroupedOpenApi.builder()
-                .group("staff-apis")
-                .displayName("조직 관리자 API")
-                .pathsToMatch("/api/bus/**", "/api/bus-operations/**", "/api/staff/**")
-                .build();
-    }
-
-    @Bean
-    public GroupedOpenApi adminApi() {
-        return GroupedOpenApi.builder()
-                .group("admin-apis")
-                .displayName("총관리자 API")
-                .pathsToMatch("/admin/**", "/api/organization/**")
-                .build();
-    }
-
-    @Bean
-    public GroupedOpenApi externalApi() {
-        return GroupedOpenApi.builder()
-                .group("external-apis")
-                .displayName("외부 연동 API")
-                .pathsToMatch("/api/kakao-api/**")
-                .build();
     }
 }

@@ -1,6 +1,6 @@
 package capston2024.bustracker.controller;
 
-import capston2024.bustracker.config.dto.*;
+import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.busOperation.BusOperationCreateDTO;
 import capston2024.bustracker.config.dto.busOperation.BusOperationDTO;
 import capston2024.bustracker.config.dto.busOperation.BusOperationStatusUpdateDTO;
@@ -10,6 +10,14 @@ import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
 import capston2024.bustracker.service.BusOperationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -26,56 +34,62 @@ import java.util.Map;
 @RequestMapping("/api/bus-operations")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "버스 운행 관리", description = "버스 운행 스케줄 및 상태 관리 API")
+@SecurityRequirement(name = "bearerAuth")
 public class BusOperationController {
 
     private final BusOperationService busOperationService;
     private final AuthService authService;
 
-    /**
-     * 새로운 버스 운행 생성 (STAFF 권한 필요)
-     */
     @PostMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(
+            summary = "버스 운행 생성",
+            description = "새로운 버스 운행 스케줄을 생성합니다. STAFF 권한이 필요합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "운행 생성 성공",
+                    content = @Content(schema = @Schema(implementation = BusOperationDTO.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음")
+    })
     public ResponseEntity<ApiResponse<BusOperationDTO>> createBusOperation(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusOperationCreateDTO createDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "버스 운행 생성 정보", required = true)
+            @Valid @RequestBody BusOperationCreateDTO createDTO) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 운행을 생성할 수 있습니다.");
-        }
+        String organizationId = validateAndGetOrganizationId(principal);
 
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String organizationId = (String) userInfo.get("organizationId");
+        log.info("버스 운행 생성 요청 - 조직: {}, 버스: {}", organizationId, createDTO.getBusId());
 
-        if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 운행을 생성할 수 없습니다.");
-        }
-
-        log.info("버스 운행 생성 요청 - 조직: {}", organizationId);
         BusOperationDTO createdOperation = busOperationService.createBusOperation(organizationId, createDTO);
 
-        return ResponseEntity.ok(new ApiResponse<>(createdOperation, "버스 운행이 성공적으로 생성되었습니다."));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ApiResponse<>(createdOperation, "버스 운행이 성공적으로 생성되었습니다."));
     }
 
-    /**
-     * 운행 상태 업데이트 (DRIVER, STAFF 권한 필요)
-     */
     @PutMapping("/status")
     @PreAuthorize("hasRole('DRIVER') or hasRole('STAFF')")
+    @Operation(
+            summary = "운행 상태 업데이트",
+            description = "버스 운행 상태를 업데이트합니다. DRIVER 또는 STAFF 권한이 필요합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상태 업데이트 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행을 찾을 수 없음")
+    })
     public ResponseEntity<ApiResponse<BusOperationDTO>> updateOperationStatus(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusOperationStatusUpdateDTO updateDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운행 상태 업데이트 정보", required = true)
+            @Valid @RequestBody BusOperationStatusUpdateDTO updateDTO) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 운행 상태를 업데이트할 수 있습니다.");
-        }
-
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String organizationId = (String) userInfo.get("organizationId");
-
-        if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 운행 상태를 업데이트할 수 없습니다.");
-        }
+        String organizationId = validateAndGetOrganizationId(principal);
 
         log.info("운행 상태 업데이트 요청 - 운행 ID: {}, 상태: {}",
                 updateDTO.getOperationId(), updateDTO.getStatus());
@@ -85,100 +99,126 @@ public class BusOperationController {
         return ResponseEntity.ok(new ApiResponse<>(updatedOperation, "운행 상태가 성공적으로 업데이트되었습니다."));
     }
 
-    /**
-     * 조직의 모든 운행 조회
-     */
     @GetMapping
+    @Operation(
+            summary = "조직의 모든 운행 조회",
+            description = "현재 사용자 조직의 모든 버스 운행을 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
     public ResponseEntity<ApiResponse<List<BusOperationDTO>>> getAllOperations(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 운행 목록을 조회할 수 있습니다.");
-        }
-
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String organizationId = (String) userInfo.get("organizationId");
-
-        if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 운행 목록을 조회할 수 없습니다.");
-        }
+        String organizationId = validateAndGetOrganizationId(principal);
 
         log.info("조직 {}의 모든 운행 조회 요청", organizationId);
+
         List<BusOperationDTO> operations = busOperationService.getAllOperationsByOrganization(organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(operations, "운행 목록이 성공적으로 조회되었습니다."));
     }
 
-    /**
-     * 운행 상태별 조회
-     */
     @GetMapping("/status/{status}")
+    @Operation(
+            summary = "운행 상태별 조회",
+            description = "특정 상태의 버스 운행들을 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 상태값")
+    })
     public ResponseEntity<ApiResponse<List<BusOperationDTO>>> getOperationsByStatus(
+            @Parameter(description = "운행 상태", required = true,
+                    schema = @Schema(allowableValues = {"SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"}))
             @PathVariable BusOperation.OperationStatus status,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 운행 목록을 조회할 수 있습니다.");
-        }
-
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String organizationId = (String) userInfo.get("organizationId");
-
-        if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 운행 목록을 조회할 수 없습니다.");
-        }
+        String organizationId = validateAndGetOrganizationId(principal);
 
         log.info("조직 {}의 {} 상태 운행 조회 요청", organizationId, status);
+
         List<BusOperationDTO> operations = busOperationService.getOperationsByStatus(organizationId, status);
 
-        return ResponseEntity.ok(new ApiResponse<>(operations, status + " 상태의 운행 목록이 성공적으로 조회되었습니다."));
+        return ResponseEntity.ok(new ApiResponse<>(operations,
+                String.format("%s 상태의 운행 목록이 성공적으로 조회되었습니다.", status)));
     }
 
-    /**
-     * 기사의 오늘 운행 스케줄 조회 (DRIVER 권한 필요)
-     */
     @GetMapping("/my-schedule")
     @PreAuthorize("hasRole('DRIVER')")
+    @Operation(
+            summary = "기사의 오늘 운행 스케줄 조회",
+            description = "로그인한 기사의 오늘 운행 스케줄을 조회합니다. DRIVER 권한이 필요합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "기사 권한 필요")
+    })
     public ResponseEntity<ApiResponse<List<BusOperationDTO>>> getMyTodaySchedule(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 기사만 자신의 스케줄을 조회할 수 있습니다.");
-        }
+        Map<String, Object> userInfo = getUserInfo(principal);
+        String driverId = (String) userInfo.get("email");
 
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String driverId = (String) userInfo.get("email"); // 사용자 ID로 이메일 사용
-
-        // 실제 사용자 ID 조회 필요시 추가 로직 구현
         log.info("기사 {}의 오늘 운행 스케줄 조회 요청", driverId);
+
         List<BusOperationDTO> operations = busOperationService.getTodayOperationsByDriver(driverId);
 
         return ResponseEntity.ok(new ApiResponse<>(operations, "오늘의 운행 스케줄이 성공적으로 조회되었습니다."));
     }
 
-    /**
-     * 운행 상세 조회
-     */
     @GetMapping("/{operationId}")
+    @Operation(
+            summary = "운행 상세 조회",
+            description = "특정 운행의 상세 정보를 조회합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행을 찾을 수 없음")
+    })
     public ResponseEntity<ApiResponse<BusOperationDTO>> getOperationById(
-            @PathVariable String operationId,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "운행 ID", required = true) @PathVariable String operationId,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
+        String organizationId = validateAndGetOrganizationId(principal);
+
+        log.info("운행 상세 조회 요청 - 운행 ID: {}", operationId);
+
+        BusOperationDTO operation = busOperationService.getOperationById(organizationId, operationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(operation, "운행 상세가 성공적으로 조회되었습니다."));
+    }
+
+    /**
+     * 사용자 인증 및 조직 ID 검증
+     */
+    private String validateAndGetOrganizationId(OAuth2User principal) {
         if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 운행 상세를 조회할 수 있습니다.");
+            throw new UnauthorizedException("인증된 사용자만 접근할 수 있습니다.");
         }
 
         Map<String, Object> userInfo = authService.getUserDetails(principal);
         String organizationId = (String) userInfo.get("organizationId");
 
         if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 운행 상세를 조회할 수 없습니다.");
+            throw new BusinessException("조직에 속하지 않은 사용자는 이 기능을 사용할 수 없습니다.");
         }
 
-        log.info("운행 상세 조회 요청 - 운행 ID: {}", operationId);
-        BusOperationDTO operation = busOperationService.getOperationById(organizationId, operationId);
+        return organizationId;
+    }
 
-        return ResponseEntity.ok(new ApiResponse<>(operation, "운행 상세가 성공적으로 조회되었습니다."));
+    /**
+     * 사용자 정보 조회
+     */
+    private Map<String, Object> getUserInfo(OAuth2User principal) {
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 접근할 수 있습니다.");
+        }
+        return authService.getUserDetails(principal);
     }
 
     /**

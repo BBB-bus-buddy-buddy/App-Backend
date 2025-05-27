@@ -12,6 +12,13 @@ import capston2024.bustracker.repository.UserRepository;
 import capston2024.bustracker.service.PasswordEncoderService;
 import capston2024.bustracker.service.TokenService;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -32,6 +39,7 @@ import java.util.Map;
 @RequestMapping("/api/staff")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "직원 관리", description = "조직 관리자(STAFF) 인증 API - 조직 ID/비밀번호 기반 로그인 제공")
 public class StaffController {
 
     private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
@@ -42,7 +50,102 @@ public class StaffController {
     private final TokenService tokenService;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<Map<String, String>>> login(@RequestBody Map<String, String> loginRequest) {
+    @Operation(
+            summary = "조직 관리자 로그인",
+            description = "조직 ID와 비밀번호를 사용하여 조직 관리자(STAFF) 계정으로 로그인합니다. " +
+                    "성공 시 JWT 액세스 토큰과 관리자 정보가 반환됩니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "로그인 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = StaffLoginResponse.class),
+                            examples = @ExampleObject(
+                                    name = "로그인 성공 예시",
+                                    value = """
+                                    {
+                                        "data": {
+                                            "token": "eyJhbGciOiJIUzUxMiJ9...",
+                                            "name": "관리자명",
+                                            "organizationId": "abc12345"
+                                        },
+                                        "message": "로그인 성공"
+                                    }
+                                    """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청 - 필수 필드 누락",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(
+                                    name = "필수 필드 누락",
+                                    value = """
+                                    {
+                                        "data": null,
+                                        "message": "조직 ID와 비밀번호를 모두 입력해주세요."
+                                    }
+                                    """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패 - 잘못된 조직 ID 또는 비밀번호",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(
+                                    name = "인증 실패",
+                                    value = """
+                                    {
+                                        "data": null,
+                                        "message": "조직 ID 또는 비밀번호가 일치하지 않습니다."
+                                    }
+                                    """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "권한 없음 - 관리자 계정이 아님",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(
+                                    name = "권한 없음",
+                                    value = """
+                                    {
+                                        "data": null,
+                                        "message": "관리자 계정이 아닙니다."
+                                    }
+                                    """
+                            )
+                    )
+            )
+    })
+    public ResponseEntity<ApiResponse<Map<String, String>>> login(
+            @Parameter(
+                    description = "로그인 요청 정보",
+                    required = true,
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = StaffLoginRequest.class),
+                            examples = @ExampleObject(
+                                    name = "로그인 요청 예시",
+                                    value = """
+                                    {
+                                        "organizationId": "abc12345",
+                                        "password": "mySecurePassword123!"
+                                    }
+                                    """
+                            )
+                    )
+            )
+            @RequestBody Map<String, String> loginRequest) {
+
         String organizationId = loginRequest.get("organizationId");
         String password = loginRequest.get("password");
 
@@ -190,5 +293,27 @@ public class StaffController {
         log.error("예기치 않은 오류 발생", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiResponse<>(null, "서버 오류가 발생했습니다."));
+    }
+
+    // Swagger 문서화를 위한 내부 클래스들
+    @Schema(description = "직원 로그인 요청")
+    public static class StaffLoginRequest {
+        @Schema(description = "조직 ID", example = "abc12345", required = true)
+        public String organizationId;
+
+        @Schema(description = "비밀번호", example = "mySecurePassword123!", required = true)
+        public String password;
+    }
+
+    @Schema(description = "직원 로그인 응답")
+    public static class StaffLoginResponse {
+        @Schema(description = "JWT 액세스 토큰", example = "eyJhbGciOiJIUzUxMiJ9...")
+        public String token;
+
+        @Schema(description = "관리자 이름", example = "관리자명")
+        public String name;
+
+        @Schema(description = "조직 ID", example = "abc12345")
+        public String organizationId;
     }
 }
