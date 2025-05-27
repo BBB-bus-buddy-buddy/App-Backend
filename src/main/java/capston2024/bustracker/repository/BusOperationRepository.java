@@ -45,4 +45,15 @@ public interface BusOperationRepository extends MongoRepository<BusOperation, St
     // 기사의 오늘 운행 스케줄 조회
     @Query("{'driverId.$id': ?0, 'scheduledStart': {$gte: ?1, $lt: ?2}}")
     List<BusOperation> findTodayOperationsByDriverId(String driverId, LocalDateTime startOfDay, LocalDateTime endOfDay);
+
+    // 만료된 운행 조회
+    List<BusOperation> findByScheduledEndBeforeAndStatusIn(
+            LocalDateTime scheduledEnd, List<BusOperation.OperationStatus> statuses);
+
+    // 상태별 카운트
+    long countByStatus(BusOperation.OperationStatus status);
+
+    // 특정 기간 완료된 운행 조회
+    List<BusOperation> findByStatusAndActualEndBetween(
+            BusOperation.OperationStatus status, LocalDateTime start, LocalDateTime end);
 }
