@@ -25,6 +25,8 @@ public class Bus {
     @Indexed(unique = true)
     private String busNumber; // 버스 ID에서 추출한 고유 번호 (3~6자리)
 
+    private String busRealNumber; // 실제 버스 번호 (운영자가 지정하는 번호)
+
     @NonNull
     private String organizationId; // 조직 ID (필수)
 
@@ -40,14 +42,19 @@ public class Bus {
     private Instant lastStationTime;  // 마지막 정류장 통과 시간
     private int prevStationIdx;  // 현재 정류장의 순서 (stations 리스트상의 인덱스)
 
+    // 새로 추가된 필드
+    private boolean isOperate; // 운행 여부 (true: 운행 중, false: 운행 중지)
+
     @Override
     public String toString() {
         return "Bus{" +
                 "id='" + id + '\'' +
                 ", busNumber='" + busNumber + '\'' +
+                ", busRealNumber='" + busRealNumber + '\'' +
                 ", organizationId='" + organizationId + '\'' +
                 ", location=" + location +
                 ", timestamp=" + timestamp +
+                ", isOperate=" + isOperate +
                 '}';
     }
 }
