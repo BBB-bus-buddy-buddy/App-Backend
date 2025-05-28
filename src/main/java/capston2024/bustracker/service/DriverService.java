@@ -4,6 +4,7 @@ import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
+import capston2024.bustracker.exception.ErrorCode;
 import capston2024.bustracker.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
@@ -21,6 +23,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -355,8 +358,53 @@ public class DriverService {
     }
 
     /**
-    * 추가정보입력 절차 완료 시, GUEST -> DRIVER로 업그레이드 및 Driver 유저 저장 서비스 필요
-    * */
+     * 조직별 모든 기사 조회
+     */
+    public List<User> getDriversByOrganizationId(String organizationId) {
+        log.info("조직 ID {}의 모든 기사 조회", organizationId);
+        return userRepository.findByOrganizationIdAndRole(organizationId, Role.DRIVER);
+    }
+
+    /**
+     * 조직의 특정 기사 조회
+     */
+    public User getDriverByIdAndOrganizationId(String driverId, String organizationId) {
+        log.info("조직 ID {}의 기사 ID {} 조회", organizationId, driverId);
+
+        User driver = userRepository.findById(driverId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "해당 기사를 찾을 수 없습니다."));
+
+        // 조직 ID 확인
+        if (!driver.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED, "다른 조직의 기사 정보에 접근할 수 없습니다.");
+        }
+
+        // 기사 권한 확인
+        if (driver.getRole() != Role.DRIVER) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND, "해당 사용자는 기사가 아닙니다.");
+        }
+
+        return driver;
+    }
+
+    /**
+     * 기사 삭제 (권한을 GUEST로 변경)
+     */
+    @Transactional
+    public boolean deleteDriver(String driverId, String organizationId) {
+        log.info("조직 ID {}의 기사 ID {} 삭제 요청", organizationId, driverId);
+
+        User driver = getDriverByIdAndOrganizationId(driverId, organizationId);
+
+        // 기사 권한을 GUEST로 변경하고 조직 ID 제거
+        driver.updateRole(Role.GUEST);
+        driver.setOrganizationId("");
+
+        userRepository.save(driver);
+
+        log.info("기사 {} 삭제 완료 (권한을 GUEST로 변경)", driverId);
+        return true;
+    }
 
     /**
      * 면허번호 포맷팅
