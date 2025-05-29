@@ -3,6 +3,7 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.RouteDTO;
 import capston2024.bustracker.config.dto.RouteRequestDTO;
+import capston2024.bustracker.config.dto.RouteUpdateDTO;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/routes")
@@ -73,7 +75,6 @@ public class RouteController {
             throw new UnauthorizedException("인증된 사용자만 라우트를 조회할 수 있습니다.");
         }
 
-        //OrganizationId 추출
         Map<String, Object> userInfo = authService.getUserDetails(principal);
         String organizationId = (String) userInfo.get("organizationId");
 
@@ -99,7 +100,6 @@ public class RouteController {
             throw new UnauthorizedException("인증된 사용자만 라우트를 생성할 수 있습니다.");
         }
 
-        //Organization 추출
         Map<String, Object> userInfo = authService.getUserDetails(principal);
         String organizationId = (String) userInfo.get("organizationId");
 
@@ -120,13 +120,12 @@ public class RouteController {
     @PreAuthorize("hasRole('STAFF')")
     public ResponseEntity<ApiResponse<RouteDTO>> updateRoute(
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody RouteRequestDTO requestDTO) {
+            @RequestBody RouteUpdateDTO updateDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 수정할 수 있습니다.");
         }
 
-        // Organization 추출
         Map<String, Object> userInfo = authService.getUserDetails(principal);
         String organizationId = (String) userInfo.get("organizationId");
 
@@ -134,8 +133,27 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 수정할 수 없습니다.");
         }
 
-        log.info("라우트 수정 요청 - 이름: {}, 조직 ID: {}", requestDTO.getRouteName(), organizationId);
-        RouteDTO updatedRoute = routeService.updateRouteByNameAndOrganizationId(requestDTO.getRouteName(), organizationId, requestDTO);
+        log.info("라우트 수정 요청 - 기존 이름: {}, 새 이름: {}, 조직 ID: {}",
+                updateDTO.getPrevRouteName(), updateDTO.getNewRouteName(), organizationId);
+
+        // RouteRequestDTO로 변환
+        RouteRequestDTO requestDTO = new RouteRequestDTO();
+        requestDTO.setRouteName(updateDTO.getNewRouteName());
+
+        // stations 변환
+        if (updateDTO.getStations() != null) {
+            List<RouteRequestDTO.RouteStationRequestDTO> stations = updateDTO.getStations().stream()
+                    .map(station -> new RouteRequestDTO.RouteStationRequestDTO(
+                            station.getSequence(),
+                            station.getStationId()
+                    ))
+                    .collect(Collectors.toList());
+            requestDTO.setStations(stations);
+        }
+
+        RouteDTO updatedRoute = routeService.updateRouteByNameAndOrganizationId(
+                updateDTO.getPrevRouteName(), organizationId, requestDTO);
+
         return ResponseEntity.ok(new ApiResponse<>(updatedRoute, "라우트가 성공적으로 수정되었습니다."));
     }
 
