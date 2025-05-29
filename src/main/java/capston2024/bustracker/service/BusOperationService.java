@@ -270,7 +270,7 @@ public class BusOperationService {
             throw new BusinessException("다른 조직의 기사를 배정할 수 없습니다.");
         }
 
-        if (!"DRIVER".equals(driver.getRoleKey())) {
+        if (!"ROLE_DRIVER".equals(driver.getRoleKey())) {
             throw new BusinessException("버스 기사 권한이 없는 사용자입니다.");
         }
 
