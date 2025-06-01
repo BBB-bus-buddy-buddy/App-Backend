@@ -24,10 +24,20 @@ import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/driver")
 @Slf4j
+@Tag(name = "Driver", description = "버스 기사 관리 관련 API")
 public class DriverController {
 
     private final DriverService driverService;
@@ -38,7 +48,16 @@ public class DriverController {
      * 운전면허 진위확인 API
      */
     @PostMapping("/verify")
-    public ResponseEntity<ApiResponse<Map<String, String>>> verifyLicense(@RequestBody LicenseVerifyRequestDto dto) {
+    @Operation(summary = "운전면허 진위확인",
+            description = "운전면허의 진위를 확인합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 진위확인 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "진위확인 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류")
+    })
+    public ResponseEntity<ApiResponse<Map<String, String>>> verifyLicense(
+            @Parameter(description = "운전면허 진위확인 요청 데이터") @RequestBody LicenseVerifyRequestDto dto) {
         log.info("운전면허 진위확인 요청 수신");
 
         try {
@@ -98,8 +117,17 @@ public class DriverController {
      */
     @GetMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "조직별 기사 목록 조회",
+            description = "현재 사용자 조직의 모든 기사를 조회합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "기사 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<User>>> getDriversByOrganization(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         log.info("조직별 기사 목록 조회 요청");
 
@@ -133,9 +161,19 @@ public class DriverController {
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "특정 기사 조회",
+            description = "조직의 특정 기사 정보를 조회합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "기사 정보 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "기사를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<User>> getDriverById(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "조회할 기사 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         log.info("특정 기사 조회 요청 - ID: {}", id);
 
@@ -168,9 +206,19 @@ public class DriverController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "기사 삭제",
+            description = "조직의 특정 기사를 삭제합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "기사 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "기사를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> deleteDriver(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "삭제할 기사 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         log.info("기사 삭제 요청 - ID: {}", id);
 
