@@ -20,6 +20,15 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +36,7 @@ import java.util.Map;
 @RequestMapping("/admin")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Admin", description = "총관리자 관련 API")
 public class AdminController {
 
     private final AuthService authService;
@@ -37,6 +47,11 @@ public class AdminController {
      * 관리자 로그인 페이지
      */
     @GetMapping("/login")
+    @Operation(summary = "관리자 로그인 페이지",
+            description = "총관리자 로그인을 위한 HTML 페이지를 반환합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 페이지 반환 성공")
+    })
     public String adminLoginPage() {
         return "admin/login";
     }
@@ -88,8 +103,14 @@ public class AdminController {
      * 총관리자 대시보드 페이지
      */
     @GetMapping("/dashboard")
+    @Operation(summary = "총관리자 대시보드",
+            description = "총관리자 대시보드 페이지를 반환합니다. 모든 조직 정보를 확인할 수 있습니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "대시보드 페이지 반환 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "302", description = "인증 실패로 로그인 페이지로 리다이렉트")
+    })
     public String adminDashboard(
-            @RequestParam(required = false) String token,
+            @Parameter(description = "JWT 토큰") @RequestParam(required = false) String token,
             @AuthenticationPrincipal OAuth2User principal,
             Model model) {
 
@@ -118,10 +139,19 @@ public class AdminController {
      */
     @PostMapping("/api/organizations")
     @ResponseBody
+    @Operation(summary = "조직 및 관리자 계정 생성",
+            description = "새로운 조직과 해당 조직의 관리자 계정을 동시에 생성합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조직 및 관리자 계정 생성 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Map<String, String>>> createOrganizationAndAdmin(
-            @RequestParam(required = false) String token,
+            @Parameter(description = "JWT 토큰") @RequestParam(required = false) String token,
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody Map<String, String> request) {
+            @Parameter(description = "조직 생성 요청 데이터") @RequestBody Map<String, String> request) {
 
         OAuth2User authenticatedAdmin = authenticateAdmin(principal, token);
         if (authenticatedAdmin == null) {
@@ -147,10 +177,19 @@ public class AdminController {
      */
     @GetMapping("/api/organization-admins")
     @ResponseBody
+    @Operation(summary = "조직별 관리자 계정 목록 조회",
+            description = "특정 조직의 모든 관리자 계정 목록을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "관리자 계정 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "조직을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<User>>> getOrganizationAdmins(
-            @RequestParam(required = false) String token,
+            @Parameter(description = "JWT 토큰") @RequestParam(required = false) String token,
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestParam String organizationId) {
+            @Parameter(description = "조직 ID") @RequestParam String organizationId) {
 
         OAuth2User authenticatedAdmin = authenticateAdmin(principal, token);
         if (authenticatedAdmin == null) {
@@ -166,10 +205,20 @@ public class AdminController {
      */
     @PostMapping("/api/reset-password")
     @ResponseBody
+    @Operation(summary = "관리자 비밀번호 리셋",
+            description = "특정 조직의 관리자 비밀번호를 새로 생성하여 리셋합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비밀번호 리셋 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "관리자 계정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Map<String, String>>> resetPassword(
-            @RequestParam(required = false) String token,
+            @Parameter(description = "JWT 토큰") @RequestParam(required = false) String token,
             @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody Map<String, String> request) {
+            @Parameter(description = "비밀번호 리셋 요청 데이터") @RequestBody Map<String, String> request) {
 
         OAuth2User authenticatedAdmin = authenticateAdmin(principal, token);
         if (authenticatedAdmin == null) {

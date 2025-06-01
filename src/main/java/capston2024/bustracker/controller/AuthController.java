@@ -22,6 +22,15 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,6 +42,7 @@ import java.util.Map;
 @Slf4j
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
+@Tag(name = "Authentication", description = "인증 및 사용자 관리 관련 API")
 public class AuthController {
 
     private final AuthService authService;
@@ -40,7 +50,16 @@ public class AuthController {
     private final DriverCreator driverCreator;
 
     @GetMapping("/user")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(@AuthenticationPrincipal OAuth2User principal) {
+    @Operation(summary = "사용자 정보 조회",
+            description = "현재 인증된 사용자의 상세 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "사용자 정보 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUser(
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
         log.info("Received request for user details. Principal: {}", principal);
         if (principal == null) {
             log.warn("No authenticated user found");
@@ -52,16 +71,33 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Boolean>> logout(HttpServletRequest request, HttpServletResponse response) {
+    @Operation(summary = "로그아웃",
+            description = "현재 세션을 종료하고 로그아웃 처리를 수행합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그아웃 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    public ResponseEntity<ApiResponse<Boolean>> logout(
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
         authService.logout(request, response);
         return ResponseEntity.ok(new ApiResponse<>(true, "성공적으로 로그아웃을 하였습니다."));
     }
 
     @PostMapping("/withdrawal")
+    @Operation(summary = "회원 탈퇴",
+            description = "현재 인증된 사용자의 계정을 삭제하고 회원 탈퇴를 처리합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "회원 탈퇴 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "회원 탈퇴 처리 중 오류 발생")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> withdrawal(
-            @AuthenticationPrincipal OAuth2User principal,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(hidden = true) HttpServletRequest request,
+            @Parameter(hidden = true) HttpServletResponse response) {
 
         log.info("회원탈퇴 요청 - Principal: {}", principal);
 
@@ -86,9 +122,18 @@ public class AuthController {
      * 일반 사용자 → 인증된 사용자 등급 승급
      */
     @PostMapping("/rankUp")
+    @Operation(summary = "사용자 권한 승급",
+            description = "조직 코드를 통해 게스트 사용자를 인증된 사용자로 권한 승급합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "권한 승급 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 인증 코드"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> rankUpUser(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody CodeRequestDTO requestDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "조직 인증 코드") @RequestBody CodeRequestDTO requestDTO) {
 
         log.info("사용자 권한 승급 요청 - 코드: {}", requestDTO.getCode());
 
@@ -108,9 +153,19 @@ public class AuthController {
     }
 
     @PostMapping("/upgrade-to-driver")
+    @Operation(summary = "드라이버 권한 업그레이드",
+            description = "사용자를 드라이버 권한으로 업그레이드하고 운전면허 정보를 등록합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "드라이버 등록 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "드라이버 등록 처리 중 오류 발생")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Driver>> upgradeToDriver(
-            @AuthenticationPrincipal OAuth2User principal,
-            @Valid @RequestBody DriverUpgradeRequestDTO request) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "드라이버 업그레이드 요청 데이터") @Valid @RequestBody DriverUpgradeRequestDTO request) {
 
         log.info("드라이버 업그레이드 요청 - Principal: {}", principal);
 
@@ -154,9 +209,19 @@ public class AuthController {
     }
 
     @PostMapping("/driver-verify-and-rankup")
+    @Operation(summary = "운전면허 검증 및 권한 업그레이드",
+            description = "운전면허 진위를 확인하고 드라이버 권한으로 업그레이드합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 검증 및 권한 업그레이드 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "운전면허 검증 실패 또는 잘못된 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "처리 중 오류 발생")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> verifyDriverLicenseAndRankUp(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody LicenseVerifyRequestDto requestDto) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운전면허 검증 요청 데이터") @RequestBody LicenseVerifyRequestDto requestDto) {
 
         log.info("운전면허 검증 및 권한 업그레이드 요청");
 
