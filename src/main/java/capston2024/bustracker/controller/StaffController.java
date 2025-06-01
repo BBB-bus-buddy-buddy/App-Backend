@@ -28,10 +28,20 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+
 @RestController
 @RequestMapping("/api/staff")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Staff", description = "조직 관리자 인증 관련 API")
 public class StaffController {
 
     private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
@@ -41,8 +51,24 @@ public class StaffController {
     private final JwtTokenProvider tokenProvider;
     private final TokenService tokenService;
 
+    /**
+     * 조직 관리자 로그인
+     */
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<Map<String, String>>> login(@RequestBody Map<String, String> loginRequest) {
+    @Operation(summary = "조직 관리자 로그인",
+            description = "조직 ID와 비밀번호를 사용하여 조직 관리자 계정으로 로그인합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "로그인 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "필수 입력값 누락"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패 (잘못된 조직 ID 또는 비밀번호)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "관리자 계정이 아님")
+    })
+    public ResponseEntity<ApiResponse<Map<String, String>>> login(
+            @Parameter(description = "로그인 요청 데이터",
+                    examples = @ExampleObject(value = "{\"organizationId\": \"ORG12345\", \"password\": \"password123\"}"))
+            @RequestBody Map<String, String> loginRequest) {
+
         String organizationId = loginRequest.get("organizationId");
         String password = loginRequest.get("password");
 
