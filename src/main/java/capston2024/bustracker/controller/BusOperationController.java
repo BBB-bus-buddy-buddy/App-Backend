@@ -1,4 +1,3 @@
-// src/main/java/capston2024/bustracker/controller/BusOperationController.java
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
@@ -18,6 +17,15 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +34,7 @@ import java.util.Map;
 @RequestMapping("/api/operation-plan")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Bus Operation", description = "버스 운행 일정 관리 API")
 public class BusOperationController {
 
     private final BusOperationService busOperationService;
@@ -36,9 +45,19 @@ public class BusOperationController {
      */
     @PostMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "버스 운행 일정 생성",
+            description = "새로운 버스 운행 일정을 생성합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 일정 생성 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<OperationPlanDTO>>> createOperationPlan(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody OperationPlanDTO operationPlanDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운행 일정 생성 요청 데이터") @RequestBody OperationPlanDTO operationPlanDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 생성할 수 있습니다.");
@@ -61,9 +80,18 @@ public class BusOperationController {
      * 버스 운행 일정 일별 조회
      */
     @GetMapping("/{date}")
+    @Operation(summary = "일별 운행 일정 조회",
+            description = "특정 날짜의 운행 일정을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "일별 운행 일정 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "일정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<OperationPlanDTO>>> getOperationPlansByDate(
-            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "조회할 날짜 (YYYY-MM-DD)") @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 조회할 수 있습니다.");
@@ -86,8 +114,16 @@ public class BusOperationController {
      * 버스 운행 일정 오늘자 조회
      */
     @GetMapping("/today")
+    @Operation(summary = "오늘 운행 일정 조회",
+            description = "오늘 날짜의 운행 일정을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "오늘 운행 일정 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<OperationPlanDTO>>> getTodayOperationPlans(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 조회할 수 있습니다.");
@@ -110,8 +146,16 @@ public class BusOperationController {
      * 버스 운행 일정 주별 조회
      */
     @GetMapping("/weekly")
+    @Operation(summary = "주별 운행 일정 조회",
+            description = "현재 주의 운행 일정을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "주별 운행 일정 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<OperationPlanDTO>>> getWeeklyOperationPlans(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 조회할 수 있습니다.");
@@ -134,8 +178,16 @@ public class BusOperationController {
      * 버스 운행 일정 월별 조회
      */
     @GetMapping("/monthly")
+    @Operation(summary = "월별 운행 일정 조회",
+            description = "현재 월의 운행 일정을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "월별 운행 일정 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<OperationPlanDTO>>> getMonthlyOperationPlans(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 조회할 수 있습니다.");
@@ -158,9 +210,18 @@ public class BusOperationController {
      * 특정 버스 운행 일정 상세 조회
      */
     @GetMapping("/detail/{id}")
+    @Operation(summary = "운행 일정 상세 조회",
+            description = "특정 운행 일정의 상세 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 일정 상세 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행 일정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<OperationPlanDTO>> getOperationPlanDetail(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "운행 일정 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 조회할 수 있습니다.");
@@ -184,9 +245,19 @@ public class BusOperationController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "운행 일정 삭제",
+            description = "지정된 운행 일정을 삭제합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 일정 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행 일정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> deleteOperationPlan(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "삭제할 운행 일정 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 삭제할 수 있습니다.");
@@ -210,9 +281,20 @@ public class BusOperationController {
      */
     @PutMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "운행 일정 수정",
+            description = "기존 운행 일정의 정보를 수정합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 일정 수정 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행 일정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<OperationPlanDTO>> updateOperationPlan(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody OperationPlanDTO operationPlanDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "운행 일정 수정 요청 데이터") @RequestBody OperationPlanDTO operationPlanDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 운행 일정을 수정할 수 있습니다.");

@@ -22,10 +22,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 @RestController
 @RequestMapping("/api/routes")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Route", description = "버스 노선 관리 관련 API")
 public class RouteController {
 
     private final RouteService routeService;
@@ -35,9 +45,18 @@ public class RouteController {
      * 조직 ID로 라우트 조회 (검색 기능 포함)
      */
     @GetMapping
+    @Operation(summary = "조직 라우트 목록 조회",
+            description = "현재 사용자 조직의 모든 라우트를 조회합니다. 검색어가 있으면 해당하는 라우트만 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "라우트 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<RouteDTO>>> getRoutesByOrganization(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestParam(required = false) String name) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "라우트 이름 검색어 (선택사항)") @RequestParam(required = false) String name) {
 
         if (principal == null) {
             log.warn("No authenticated user found");
@@ -67,9 +86,19 @@ public class RouteController {
      * 특정 라우트 상세 조회
      */
     @GetMapping("/{id}")
+    @Operation(summary = "특정 라우트 상세 조회",
+            description = "라우트 ID로 특정 라우트의 상세 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "라우트 상세 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "라우트를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<RouteDTO>> getRouteById(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "조회할 라우트 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 조회할 수 있습니다.");
@@ -92,9 +121,20 @@ public class RouteController {
      */
     @PostMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "새로운 라우트 생성",
+            description = "새로운 버스 라우트를 생성합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "라우트 생성 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 존재하는 라우트명")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<RouteDTO>> createRoute(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody RouteRequestDTO requestDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "라우트 생성 요청 데이터") @RequestBody RouteRequestDTO requestDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 생성할 수 있습니다.");
@@ -118,9 +158,21 @@ public class RouteController {
      */
     @PutMapping
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "라우트 정보 수정",
+            description = "기존 라우트의 정보를 수정합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "라우트 수정 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "라우트를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 존재하는 라우트명")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<RouteDTO>> updateRoute(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody RouteUpdateDTO updateDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "라우트 수정 요청 데이터") @RequestBody RouteUpdateDTO updateDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 수정할 수 있습니다.");
@@ -162,9 +214,19 @@ public class RouteController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "라우트 삭제",
+            description = "지정된 라우트를 삭제합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "라우트 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "라우트를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Void>> deleteRoute(
-            @PathVariable String id,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "삭제할 라우트 ID") @PathVariable String id,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 라우트를 삭제할 수 있습니다.");

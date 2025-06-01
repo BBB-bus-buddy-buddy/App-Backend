@@ -2,7 +2,6 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
-import capston2024.bustracker.domain.Route;
 import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
@@ -17,6 +16,15 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
+// Swagger 어노테이션 추가
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +34,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/bus")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Bus", description = "버스 관리 관련 API")
 public class BusController {
 
     private final BusService busService;
@@ -36,9 +45,19 @@ public class BusController {
      */
     @PostMapping()
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "버스 등록",
+            description = "새로운 버스를 등록합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 등록 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<String>> createBus(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusRegisterDTO busRegisterDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "버스 등록 요청 데이터") @RequestBody BusRegisterDTO busRegisterDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 등록할 수 있습니다.");
@@ -62,9 +81,19 @@ public class BusController {
      */
     @DeleteMapping("/{busNumber}")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "버스 삭제",
+            description = "지정된 버스 번호의 버스를 삭제합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 삭제 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> deleteBus(
-            @PathVariable String busNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "삭제할 버스 번호") @PathVariable String busNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 삭제할 수 있습니다.");
@@ -88,9 +117,20 @@ public class BusController {
      */
     @PutMapping()
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "버스 정보 수정",
+            description = "버스의 정보를 수정합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 정보 수정 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> updateBus(
-            @AuthenticationPrincipal OAuth2User principal,
-            @RequestBody BusInfoUpdateDTO busInfoUpdateDTO) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+            @Parameter(description = "버스 정보 수정 요청 데이터") @RequestBody BusInfoUpdateDTO busInfoUpdateDTO) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 수정할 수 있습니다.");
@@ -117,8 +157,16 @@ public class BusController {
      * 조직별 모든 버스 조회
      */
     @GetMapping()
+    @Operation(summary = "조직별 모든 버스 조회",
+            description = "현재 사용자가 속한 조직의 모든 버스 목록을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getAllBuses(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
@@ -141,9 +189,18 @@ public class BusController {
      * 특정 버스 조회
      */
     @GetMapping("/{busNumber}")
+    @Operation(summary = "특정 버스 조회",
+            description = "지정된 버스 번호의 버스 상세 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<BusRealTimeStatusDTO>> getBusByNumber(
-            @PathVariable String busNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "조회할 버스 번호") @PathVariable String busNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
@@ -172,9 +229,18 @@ public class BusController {
      * 특정 정류장을 경유하는 버스 조회
      */
     @GetMapping("/station/{stationId}")
+    @Operation(summary = "특정 정류장 경유 버스 조회",
+            description = "지정된 정류장을 경유하는 모든 버스 목록을 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "경유 버스 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "정류장을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getBusesByStation(
-            @PathVariable String stationId,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "정류장 ID") @PathVariable String stationId,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
@@ -195,12 +261,20 @@ public class BusController {
 
     /**
      * 버스 정류장 상세 목록 조회
-     * 버스 라우트의 모든 정류장 상세 정보를 한 번에 반환합니다.
      */
     @GetMapping("/stations-detail/{busNumber}")
+    @Operation(summary = "버스 정류장 상세 목록 조회",
+            description = "지정된 버스의 모든 정류장 상세 정보를 조회합니다. 각 정류장의 통과 상태와 도착 예정 시간을 포함합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 정류장 상세 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<Station>>> getBusStationsDetail(
-            @PathVariable String busNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "버스 번호") @PathVariable String busNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 정류장 목록을 조회할 수 있습니다.");
@@ -222,9 +296,18 @@ public class BusController {
      * 버스 좌석 조회
      */
     @GetMapping("/seats/{busNumber}")
+    @Operation(summary = "버스 좌석 정보 조회",
+            description = "지정된 버스의 좌석 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 좌석 정보 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<BusSeatDTO>> getBusSeatsByBusNumber(
-            @PathVariable String busNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "버스 번호") @PathVariable String busNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 좌석 정보를 조회할 수 있습니다.");
@@ -247,9 +330,18 @@ public class BusController {
      * 버스 위치 조회
      */
     @GetMapping("/location/{busNumber}")
+    @Operation(summary = "버스 위치 정보 조회",
+            description = "지정된 버스의 현재 위치 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 위치 정보 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<LocationDTO>> getBusLocationByBusNumber(
-            @PathVariable String busNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "버스 번호") @PathVariable String busNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 위치 정보를 조회할 수 있습니다.");
@@ -272,9 +364,18 @@ public class BusController {
      * 실제 버스 번호로 버스 조회
      */
     @GetMapping("/real-number/{busRealNumber}")
+    @Operation(summary = "실제 버스 번호로 버스 조회",
+            description = "운영자가 지정한 실제 버스 번호로 버스를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<BusRealTimeStatusDTO>> getBusByRealNumber(
-            @PathVariable String busRealNumber,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "실제 버스 번호") @PathVariable String busRealNumber,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
@@ -304,8 +405,16 @@ public class BusController {
      * 운행 중인 버스만 조회
      */
     @GetMapping("/operating")
+    @Operation(summary = "운행 중인 버스 조회",
+            description = "현재 운행 중인 상태의 버스만 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 중인 버스 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<List<BusRealTimeStatusDTO>>> getOperatingBuses(
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스를 조회할 수 있습니다.");
@@ -329,10 +438,20 @@ public class BusController {
      */
     @PutMapping("/{busNumber}/operate")
     @PreAuthorize("hasRole('STAFF')")
+    @Operation(summary = "버스 운행 상태 변경",
+            description = "버스의 운행 상태를 시작 또는 중지로 변경합니다. 관리자 권한이 필요합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "버스 운행 상태 변경 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "버스를 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
     public ResponseEntity<ApiResponse<Boolean>> toggleBusOperation(
-            @PathVariable String busNumber,
-            @RequestParam boolean isOperate,
-            @AuthenticationPrincipal OAuth2User principal) {
+            @Parameter(description = "버스 번호") @PathVariable String busNumber,
+            @Parameter(description = "운행 상태 (true: 운행 시작, false: 운행 중지)") @RequestParam boolean isOperate,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         if (principal == null) {
             throw new UnauthorizedException("인증된 사용자만 버스 운행 상태를 변경할 수 있습니다.");
