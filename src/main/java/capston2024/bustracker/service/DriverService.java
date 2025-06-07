@@ -2,13 +2,14 @@ package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.Driver;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ErrorCode;
+import capston2024.bustracker.repository.DriverRepository;
 import capston2024.bustracker.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
@@ -31,13 +32,11 @@ import java.util.Map;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class DriverService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @Autowired
-    private UserRepository userRepository;
+    private final DriverRepository driverRepository;
+    private final UserRepository userRepository;
 
     // API 접근 정보 (상수화)
     private static final String CLIENT_ID = "55a49e2c-2f9a-412d-9e54-02842fcc9100";
@@ -50,7 +49,11 @@ public class DriverService {
     // RestTemplate with custom error handler
     private final RestTemplate restTemplate;
 
-    public DriverService() {
+    @Autowired
+    public DriverService(DriverRepository driverRepository, UserRepository userRepository) {
+        this.driverRepository = driverRepository;
+        this.userRepository = userRepository;
+
         // 에러 응답을 직접 처리하기 위한 커스텀 에러 핸들러
         this.restTemplate = new RestTemplate();
         this.restTemplate.setErrorHandler(new ResponseErrorHandler() {
@@ -102,6 +105,58 @@ public class DriverService {
             log.error("운전면허 진위확인 처리 중 예외 발생", e);
             throw new BusinessException("운전면허 진위확인 처리 중 오류가 발생했습니다: " + e.getMessage());
         }
+    }
+
+    /**
+     * 조직별 모든 기사 조회
+     */
+    public List<Driver> getDriversByOrganizationId(String organizationId) {
+        log.info("조직 ID {}의 모든 기사 조회", organizationId);
+        return driverRepository.findByOrganizationId(organizationId);
+    }
+
+    /**
+     * 조직의 특정 기사 조회
+     */
+    public Driver getDriverByIdAndOrganizationId(String driverId, String organizationId) {
+        log.info("조직 ID {}의 기사 ID {} 조회", organizationId, driverId);
+
+        Driver driver = driverRepository.findByIdAndOrganizationId(driverId, organizationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "해당 기사를 찾을 수 없습니다."));
+
+        return driver;
+    }
+
+    /**
+     * 기사 삭제 (권한을 GUEST로 변경)
+     */
+    @Transactional
+    public boolean deleteDriver(String driverId, String organizationId) {
+        log.info("조직 ID {}의 기사 ID {} 삭제 요청", organizationId, driverId);
+
+        // 드라이버가 존재하는지 확인
+        Driver driver = getDriverByIdAndOrganizationId(driverId, organizationId);
+
+        // 드라이버 정보를 User로 전환하여 GUEST로 변경
+        // Auth 컬렉션에서 해당 문서를 User로 조회
+        User user = userRepository.findById(driverId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."));
+
+        // 기사 권한을 GUEST로 변경하고 조직 ID 제거
+        user.updateRole(Role.GUEST);
+        user.setOrganizationId("");
+
+        userRepository.save(user);
+
+        log.info("기사 {} 삭제 완료 (권한을 GUEST로 변경)", driverId);
+        return true;
+    }
+
+    /**
+     * 운전면허 번호 중복 확인
+     */
+    public boolean isLicenseNumberDuplicate(String licenseNumber, String organizationId) {
+        return driverRepository.existsByOrganizationIdAndLicenseNumber(organizationId, licenseNumber);
     }
 
     /**
@@ -355,55 +410,6 @@ public class DriverService {
 
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         return data.containsKey("continue2Way") && (boolean) data.get("continue2Way");
-    }
-
-    /**
-     * 조직별 모든 기사 조회
-     */
-    public List<User> getDriversByOrganizationId(String organizationId) {
-        log.info("조직 ID {}의 모든 기사 조회", organizationId);
-        return userRepository.findByOrganizationIdAndRole(organizationId, Role.DRIVER);
-    }
-
-    /**
-     * 조직의 특정 기사 조회
-     */
-    public User getDriverByIdAndOrganizationId(String driverId, String organizationId) {
-        log.info("조직 ID {}의 기사 ID {} 조회", organizationId, driverId);
-
-        User driver = userRepository.findById(driverId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "해당 기사를 찾을 수 없습니다."));
-
-        // 조직 ID 확인
-        if (!driver.getOrganizationId().equals(organizationId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED, "다른 조직의 기사 정보에 접근할 수 없습니다.");
-        }
-
-        // 기사 권한 확인
-        if (driver.getRole() != Role.DRIVER) {
-            throw new BusinessException(ErrorCode.USER_NOT_FOUND, "해당 사용자는 기사가 아닙니다.");
-        }
-
-        return driver;
-    }
-
-    /**
-     * 기사 삭제 (권한을 GUEST로 변경)
-     */
-    @Transactional
-    public boolean deleteDriver(String driverId, String organizationId) {
-        log.info("조직 ID {}의 기사 ID {} 삭제 요청", organizationId, driverId);
-
-        User driver = getDriverByIdAndOrganizationId(driverId, organizationId);
-
-        // 기사 권한을 GUEST로 변경하고 조직 ID 제거
-        driver.updateRole(Role.GUEST);
-        driver.setOrganizationId("");
-
-        userRepository.save(driver);
-
-        log.info("기사 {} 삭제 완료 (권한을 GUEST로 변경)", driverId);
-        return true;
     }
 
     /**
