@@ -207,69 +207,69 @@ public class AuthController {
             );
         }
     }
-
-    @PostMapping("/driver-verify-and-rankup")
-    @Operation(summary = "운전면허 검증 및 권한 업그레이드",
-            description = "운전면허 진위를 확인하고 드라이버 권한으로 업그레이드합니다.")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 검증 및 권한 업그레이드 성공",
-                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "운전면허 검증 실패 또는 잘못된 요청"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "처리 중 오류 발생")
-    })
-    @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<ApiResponse<Boolean>> verifyDriverLicenseAndRankUp(
-            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
-            @Parameter(description = "운전면허 검증 요청 데이터") @RequestBody LicenseVerifyRequestDto requestDto) {
-
-        log.info("운전면허 검증 및 권한 업그레이드 요청");
-
-        if (principal == null) {
-            log.warn("인증된 사용자를 찾을 수 없음");
-            throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
-        }
-
-        try {
-            // 1. 운전면허 검증
-            Map<String, String> verificationResult = driverService.verifyLicense(requestDto);
-
-            String authenticity = verificationResult.get("resAuthenticity");
-            if (!"1".equals(authenticity) && !"2".equals(authenticity)) {
-                log.warn("운전면허 검증 실패: {}", verificationResult.get("resAuthenticityDesc1"));
-                return ResponseEntity.badRequest().body(
-                        new ApiResponse<>(false, verificationResult.get("resAuthenticityDesc1"))
-                );
-            }
-
-            // 2. 권한 업그레이드
-            // 고정값인 organization 값 사용
-            String organizationCode = driverService.getDefaultOrganization();
-
-            boolean isRankUp = authService.rankUpGuestToDriver(principal, organizationCode, requestDto);
-
-            if (isRankUp) {
-                return ResponseEntity.ok(
-                        new ApiResponse<>(true, "운전면허 검증 및 권한 업그레이드가 완료되었습니다.")
-                );
-            } else {
-                return ResponseEntity.badRequest().body(
-                        new ApiResponse<>(false, "권한 업그레이드에 실패했습니다.")
-                );
-            }
-
-        } catch (BusinessException e) {
-            log.error("운전면허 검증 및 권한 업그레이드 중 비즈니스 오류 발생: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    new ApiResponse<>(false, e.getMessage())
-            );
-        } catch (Exception e) {
-            log.error("운전면허 검증 및 권한 업그레이드 중 오류 발생", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    new ApiResponse<>(false, "처리 중 오류가 발생했습니다.")
-            );
-        }
-    }
+//    ✅미사용 API(프로젝트 MVP 미해당에 따른 검증절차 임시 스킵)
+//    @PostMapping("/driver-verify-and-rankup")
+//    @Operation(summary = "운전면허 검증 및 권한 업그레이드",
+//            description = "운전면허 진위를 확인하고 드라이버 권한으로 업그레이드합니다.")
+//    @ApiResponses(value = {
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 검증 및 권한 업그레이드 성공",
+//                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "운전면허 검증 실패 또는 잘못된 요청"),
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "처리 중 오류 발생")
+//    })
+//    @SecurityRequirement(name = "Bearer Authentication")
+//    public ResponseEntity<ApiResponse<Boolean>> verifyDriverLicenseAndRankUp(
+//            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
+//            @Parameter(description = "운전면허 검증 요청 데이터") @RequestBody LicenseVerifyRequestDto requestDto) {
+//
+//        log.info("운전면허 검증 및 권한 업그레이드 요청");
+//
+//        if (principal == null) {
+//            log.warn("인증된 사용자를 찾을 수 없음");
+//            throw new UnauthorizedException("인증된 사용자를 찾을 수 없습니다");
+//        }
+//
+//        try {
+//            // 1. 운전면허 검증
+//            Map<String, String> verificationResult = driverService.verifyLicense(requestDto);
+//
+//            String authenticity = verificationResult.get("resAuthenticity");
+//            if (!"1".equals(authenticity) && !"2".equals(authenticity)) {
+//                log.warn("운전면허 검증 실패: {}", verificationResult.get("resAuthenticityDesc1"));
+//                return ResponseEntity.badRequest().body(
+//                        new ApiResponse<>(false, verificationResult.get("resAuthenticityDesc1"))
+//                );
+//            }
+//
+//            // 2. 권한 업그레이드
+//            // 고정값인 organization 값 사용
+//            String organizationCode = driverService.getDefaultOrganization();
+//
+//            boolean isRankUp = authService.rankUpGuestToDriver(principal, organizationCode, requestDto);
+//
+//            if (isRankUp) {
+//                return ResponseEntity.ok(
+//                        new ApiResponse<>(true, "운전면허 검증 및 권한 업그레이드가 완료되었습니다.")
+//                );
+//            } else {
+//                return ResponseEntity.badRequest().body(
+//                        new ApiResponse<>(false, "권한 업그레이드에 실패했습니다.")
+//                );
+//            }
+//
+//        } catch (BusinessException e) {
+//            log.error("운전면허 검증 및 권한 업그레이드 중 비즈니스 오류 발생: {}", e.getMessage());
+//            return ResponseEntity.badRequest().body(
+//                    new ApiResponse<>(false, e.getMessage())
+//            );
+//        } catch (Exception e) {
+//            log.error("운전면허 검증 및 권한 업그레이드 중 오류 발생", e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+//                    new ApiResponse<>(false, "처리 중 오류가 발생했습니다.")
+//            );
+//        }
+//    }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Boolean>> handleUnauthorizedException(UnauthorizedException ex) {
