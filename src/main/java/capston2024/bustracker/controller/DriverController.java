@@ -3,6 +3,7 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.config.status.Role;
+import capston2024.bustracker.domain.Driver;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
@@ -126,7 +127,7 @@ public class DriverController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (관리자 권한 필요)")
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<ApiResponse<List<User>>> getDriversByOrganization(
+    public ResponseEntity<ApiResponse<List<Driver>>> getDriversByOrganization(
             @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
         log.info("조직별 기사 목록 조회 요청");
@@ -150,7 +151,7 @@ public class DriverController {
             throw new BusinessException("조직에 속하지 않은 사용자는 기사 정보를 조회할 수 없습니다.");
         }
 
-        List<User> drivers = driverService.getDriversByOrganizationId(organizationId);
+        List<Driver> drivers = driverService.getDriversByOrganizationId(organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(drivers,
                 String.format("조직의 모든 기사가 성공적으로 조회되었습니다. (총 %d명)", drivers.size())));
@@ -171,7 +172,7 @@ public class DriverController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "기사를 찾을 수 없음")
     })
     @SecurityRequirement(name = "Bearer Authentication")
-    public ResponseEntity<ApiResponse<User>> getDriverById(
+    public ResponseEntity<ApiResponse<Driver>> getDriverById(
             @Parameter(description = "조회할 기사 ID") @PathVariable String id,
             @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
 
@@ -196,7 +197,7 @@ public class DriverController {
             throw new BusinessException("조직에 속하지 않은 사용자는 기사 정보를 조회할 수 없습니다.");
         }
 
-        User driver = driverService.getDriverByIdAndOrganizationId(id, organizationId);
+        Driver driver = driverService.getDriverByIdAndOrganizationId(id, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(driver, "기사 정보가 성공적으로 조회되었습니다."));
     }
