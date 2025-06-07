@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BusRealTimeStatusDTO {
+    private String busId;
     private String busNumber;           // 버스 번호
     private String busRealNumber;       // 실제 버스 번호 (운영자가 지정하는 번호)
     private String routeName;           // 노선 이름
