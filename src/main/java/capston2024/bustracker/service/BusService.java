@@ -7,13 +7,16 @@ import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.utils.BusNumberGenerator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
+import capston2024.bustracker.handler.BusDriverWebSocketHandler;
 import capston2024.bustracker.repository.BusRepository;
 import capston2024.bustracker.repository.RouteRepository;
 import capston2024.bustracker.repository.StationRepository;
 import com.mongodb.DBRef;
+import jakarta.activation.DataHandler;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -45,6 +48,7 @@ public class BusService {
 
     // 버스 위치 업데이트 큐
     private final Map<String, BusRealTimeLocationDTO> pendingLocationUpdates = new ConcurrentHashMap<>();
+    private ApplicationContext applicationContext;
 
     /**
      * 버스 상태 업데이트 이벤트
@@ -479,6 +483,7 @@ public class BusService {
 
         // 상태 DTO 생성
         BusRealTimeStatusDTO statusDTO = new BusRealTimeStatusDTO();
+        statusDTO.setBusId(bus.getId());
         statusDTO.setBusNumber(bus.getBusNumber());
         statusDTO.setBusRealNumber(bus.getBusRealNumber()); // 새 필드
         statusDTO.setRouteName(routeName);
@@ -667,6 +672,46 @@ public class BusService {
         }
 
         return nearestStation;
+    }
+
+    /**
+     * 버스 비활성 상태 업데이트
+     */
+    public void updateBusInactiveStatus(String busNumber) {
+        try {
+            // 현재는 로그만 남김 - 필요시 DB 업데이트 로직 추가
+            log.info("버스 {} 비활성 상태로 업데이트", busNumber);
+
+            // 향후 확장: DB에서 버스 상태를 'INACTIVE'로 업데이트
+            // Bus bus = getBusByNumberAndOrganization(busNumber, organizationId);
+            // bus.setActive(false);
+            // busRepository.save(bus);
+
+        } catch (Exception e) {
+            log.error("버스 비활성 상태 업데이트 실패: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 활성화된 버스 수 조회 (웹소켓 연결 기반)
+     */
+    public int getActiveBusCount(String organizationId) {
+        BusDriverWebSocketHandler handler = applicationContext.getBean(BusDriverWebSocketHandler.class);
+        Set<String> connectedBuses = handler.getActiveBusNumbers();
+
+        // 실제 운행 중이면서 웹소켓도 연결된 버스 수
+        int realActiveCount = (int) connectedBuses.stream()
+                .filter(busNumber -> {
+                    try {
+                        Bus bus = getBusByNumberAndOrganization(busNumber, organizationId);
+                        return bus.isOperate();
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .count();
+
+        return realActiveCount;
     }
 
     /**
