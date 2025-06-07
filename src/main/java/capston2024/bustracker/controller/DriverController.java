@@ -45,74 +45,6 @@ public class DriverController {
     private final ObjectMapper objectMapper;
     private final AuthService authService;
 
-//    /** ✅미사용 API(프로젝트 MVP 미해당에 따른 검증절차 임시 스킵)
-//     * 운전면허 진위확인 API
-//     */
-//    @PostMapping("/verify")
-//    @Operation(summary = "운전면허 진위확인",
-//            description = "운전면허의 진위를 확인합니다.")
-//    @ApiResponses(value = {
-//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 진위확인 성공",
-//                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "진위확인 실패"),
-//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류")
-//    })
-//    public ResponseEntity<ApiResponse<Map<String, String>>> verifyLicense(
-//            @Parameter(description = "운전면허 진위확인 요청 데이터") @RequestBody LicenseVerifyRequestDto dto) {
-//        log.info("운전면허 진위확인 요청 수신");
-//
-//        try {
-//            // 요청 DTO 로깅
-//            try {
-//                log.info("요청 DTO: {}", objectMapper.writeValueAsString(dto));
-//            } catch (Exception e) {
-//                log.warn("요청 DTO 로깅 실패: {}", e.getMessage());
-//            }
-//
-//            Map<String, String> response = driverService.verifyLicense(dto);
-//
-//            // 응답 로깅
-//            try {
-//                log.info("진위확인 응답: {}", objectMapper.writeValueAsString(response));
-//            } catch (Exception e) {
-//                log.warn("응답 로깅 실패: {}", e.getMessage());
-//            }
-//
-//            // 진위확인 결과 처리 - API 가이드에 따라 "1" 또는 "2"가 성공
-//            String authenticity = response.get("resAuthenticity");
-//            String message;
-//
-//            if ("1".equals(authenticity) || "2".equals(authenticity)) {
-//                message = "운전면허 진위확인에 성공했습니다: " +
-//                        (response.containsKey("resAuthenticityDesc1") ?
-//                                response.get("resAuthenticityDesc1") : "진위확인 완료");
-//                log.info("진위확인 성공: {}", message);
-//                return ResponseEntity.ok(new ApiResponse<>(response, message));
-//            } else {
-//                // 2단계 인증 필요 등의 특별 메시지 확인
-//                if (response.containsKey("continue2Way") && "true".equals(response.get("continue2Way"))) {
-//                    message = "운전면허 진위확인을 위해 추가 인증이 필요합니다.";
-//                } else {
-//                    message = "운전면허 진위확인에 실패했습니다: " +
-//                            (response.containsKey("resAuthenticityDesc1") ?
-//                                    response.get("resAuthenticityDesc1") : "진위확인 실패");
-//                }
-//
-//                log.warn("진위확인 실패: {}", message);
-//                return ResponseEntity.badRequest()
-//                        .body(new ApiResponse<>(response, message));
-//            }
-//        } catch (BusinessException e) {
-//            log.error("운전면허 진위확인 중 비즈니스 오류 발생: {}", e.getMessage(), e);
-//            return ResponseEntity.badRequest()
-//                    .body(new ApiResponse<>(null, e.getMessage()));
-//        } catch (Exception e) {
-//            log.error("운전면허 진위확인 중 예외 발생: {}", e.getMessage(), e);
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//                    .body(new ApiResponse<>(null, "운전면허 진위확인 처리 중 오류가 발생했습니다."));
-//        }
-//    }
-
     /**
      * 조직별 모든 기사 조회
      */
@@ -285,4 +217,73 @@ public class DriverController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
+
+
+    //    /** ✅미사용 API(프로젝트 MVP 미해당에 따른 검증절차 임시 스킵)
+//     * 운전면허 진위확인 API
+//     */
+//    @PostMapping("/verify")
+//    @Operation(summary = "운전면허 진위확인",
+//            description = "운전면허의 진위를 확인합니다.")
+//    @ApiResponses(value = {
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운전면허 진위확인 성공",
+//                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "진위확인 실패"),
+//            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류")
+//    })
+//    public ResponseEntity<ApiResponse<Map<String, String>>> verifyLicense(
+//            @Parameter(description = "운전면허 진위확인 요청 데이터") @RequestBody LicenseVerifyRequestDto dto) {
+//        log.info("운전면허 진위확인 요청 수신");
+//
+//        try {
+//            // 요청 DTO 로깅
+//            try {
+//                log.info("요청 DTO: {}", objectMapper.writeValueAsString(dto));
+//            } catch (Exception e) {
+//                log.warn("요청 DTO 로깅 실패: {}", e.getMessage());
+//            }
+//
+//            Map<String, String> response = driverService.verifyLicense(dto);
+//
+//            // 응답 로깅
+//            try {
+//                log.info("진위확인 응답: {}", objectMapper.writeValueAsString(response));
+//            } catch (Exception e) {
+//                log.warn("응답 로깅 실패: {}", e.getMessage());
+//            }
+//
+//            // 진위확인 결과 처리 - API 가이드에 따라 "1" 또는 "2"가 성공
+//            String authenticity = response.get("resAuthenticity");
+//            String message;
+//
+//            if ("1".equals(authenticity) || "2".equals(authenticity)) {
+//                message = "운전면허 진위확인에 성공했습니다: " +
+//                        (response.containsKey("resAuthenticityDesc1") ?
+//                                response.get("resAuthenticityDesc1") : "진위확인 완료");
+//                log.info("진위확인 성공: {}", message);
+//                return ResponseEntity.ok(new ApiResponse<>(response, message));
+//            } else {
+//                // 2단계 인증 필요 등의 특별 메시지 확인
+//                if (response.containsKey("continue2Way") && "true".equals(response.get("continue2Way"))) {
+//                    message = "운전면허 진위확인을 위해 추가 인증이 필요합니다.";
+//                } else {
+//                    message = "운전면허 진위확인에 실패했습니다: " +
+//                            (response.containsKey("resAuthenticityDesc1") ?
+//                                    response.get("resAuthenticityDesc1") : "진위확인 실패");
+//                }
+//
+//                log.warn("진위확인 실패: {}", message);
+//                return ResponseEntity.badRequest()
+//                        .body(new ApiResponse<>(response, message));
+//            }
+//        } catch (BusinessException e) {
+//            log.error("운전면허 진위확인 중 비즈니스 오류 발생: {}", e.getMessage(), e);
+//            return ResponseEntity.badRequest()
+//                    .body(new ApiResponse<>(null, e.getMessage()));
+//        } catch (Exception e) {
+//            log.error("운전면허 진위확인 중 예외 발생: {}", e.getMessage(), e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body(new ApiResponse<>(null, "운전면허 진위확인 처리 중 오류가 발생했습니다."));
+//        }
+//    }
 }
