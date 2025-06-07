@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,17 +27,15 @@ public class PassengerLocationService {
     // 승객별 상태 관리 (userId -> 상태 맵)
     private final Map<String, PassengerState> passengerStates = new ConcurrentHashMap<>();
 
-    // 자동 탑승 감지를 위한 거리 임계값 (미터 단위)
-    private static final double AUTO_BOARDING_DISTANCE_THRESHOLD = 25.0;
-
-    // 연속 감지를 위한 최소 카운트
-    private static final int CONSECUTIVE_DETECTION_THRESHOLD = 3;
-
-    // 자동 하차 감지를 위한 거리 임계값 (미터 단위)
-    private static final double AUTO_ALIGHTING_DISTANCE_THRESHOLD = 50.0;
+    // **현실적으로 조정된 임계값들**
+    private static final double AUTO_BOARDING_DISTANCE_THRESHOLD = 50.0; // 50미터로 증가 (GPS 오차 고려)
+    private static final double AUTO_ALIGHTING_DISTANCE_THRESHOLD = 100.0; // 100미터로 증가
+    private static final int CONSECUTIVE_DETECTION_THRESHOLD = 5; // 5회로 증가 (오작동 방지)
+    private static final long MIN_DWELL_TIME_SECONDS = 45; // 45초로 증가 (신호대기 등 고려)
+    private static final long MIN_TRIP_TIME_SECONDS = 120; // 최소 2분 이동 시간
 
     /**
-     * 승객 위치 정보 처리
+     * 승객 위치 정보 처리 - 배터리 최적화 및 정확도 개선
      * @param locationDTO 승객 위치 정보
      * @return 자동 탑승/하차 감지 여부
      */
@@ -48,41 +47,95 @@ public class PassengerLocationService {
         PassengerState state = passengerStates.computeIfAbsent(userId,
                 k -> new PassengerState(userId, organizationId));
 
-        // 위치 업데이트
+        // 위치 업데이트 및 유효성 검증
+        if (!isValidLocationUpdate(state, locationDTO)) {
+            log.debug("유효하지 않은 위치 업데이트 무시: 사용자 = {}", userId);
+            return false;
+        }
+
         state.updateLocation(locationDTO.getLatitude(), locationDTO.getLongitude(), locationDTO.getTimestamp());
 
-        // 조직의 모든 버스 조회
-        List<Bus> buses = busRepository.findByOrganizationId(organizationId);
+        // 조직의 운행 중인 버스만 조회 (성능 최적화)
+        List<Bus> operatingBuses = busRepository.findByOrganizationIdAndIsOperateTrue(organizationId);
+
+        if (operatingBuses.isEmpty()) {
+            log.debug("조직 {}에 운행 중인 버스가 없습니다", organizationId);
+            return false;
+        }
 
         // 승객 상태에 따른 처리
         if (state.isOnBus()) {
             // 이미 버스에 탑승 중인 경우 - 하차 감지 처리
-            return detectAlighting(state, buses);
+            return detectAlighting(state, operatingBuses);
         } else {
             // 버스에 탑승하지 않은 경우 - 탑승 감지 처리
-            return detectBoarding(state, buses);
+            return detectBoarding(state, operatingBuses);
         }
     }
 
     /**
-     * 탑승 감지 처리
+     * 위치 업데이트 유효성 검증 - 배터리 최적화
+     */
+    private boolean isValidLocationUpdate(PassengerState state, PassengerLocationDTO newLocation) {
+        // 너무 자주 업데이트하는 것을 방지 (최소 10초 간격)
+        if (state.getLastUpdateTime() != 0) {
+            long timeDiff = newLocation.getTimestamp() - state.getLastUpdateTime();
+            if (timeDiff < 10000) { // 10초
+                return false;
+            }
+        }
+
+        // GPS 정확도가 너무 낮은 경우 무시 (100m 이상 점프)
+        if (state.getLatitude() != 0 && state.getLongitude() != 0) {
+            double distance = calculateDistance(
+                    state.getLatitude(), state.getLongitude(),
+                    newLocation.getLatitude(), newLocation.getLongitude()
+            );
+
+            // 100m 이상 점프는 GPS 오류로 간주 (단, 장시간 후 업데이트는 허용)
+            if (distance > 100 && (newLocation.getTimestamp() - state.getLastUpdateTime()) < 60000) {
+                log.warn("GPS 점프 감지로 위치 업데이트 무시: 사용자 = {}, 거리 = {}m",
+                        state.getUserId(), distance);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 탑승 감지 처리 - 정확도 개선
      */
     private boolean detectBoarding(PassengerState state, List<Bus> buses) {
         // 가장 가까운 버스와 거리 찾기
         BusDistance closestBus = findClosestBus(state, buses);
 
         if (closestBus != null && closestBus.distance <= AUTO_BOARDING_DISTANCE_THRESHOLD) {
-            // 탑승 감지 카운트 증가
+            // **추가 검증 조건들**
+
+            // 1. 버스가 실제로 정차 중인지 확인 (속도 체크)
+            if (!isBusStationary(closestBus.bus)) {
+                log.debug("버스가 이동 중이므로 탑승 감지 건너뜀: 버스 = {}", closestBus.bus.getBusNumber());
+                state.resetBoardingDetectionCount();
+                return false;
+            }
+
+            // 2. 승객이 일정 시간 이상 머물렀는지 확인
+            if (!hasMinimumDwellTime(state, MIN_DWELL_TIME_SECONDS)) {
+                return false;
+            }
+
+            // 3. 연속 감지 카운트 증가
             state.incrementBoardingDetectionCount(closestBus.bus.getBusNumber());
 
-            // 연속 감지 횟수가 임계값을 초과하면 탑승 처리
+            // 4. 임계값 초과 시 탑승 처리
             if (state.getBoardingDetectionCount() >= CONSECUTIVE_DETECTION_THRESHOLD) {
-                log.info("승객 {} 자동 탑승 감지: 버스={}, 거리={}m",
-                        state.getUserId(), closestBus.bus.getBusNumber(), closestBus.distance);
+                log.info("승객 {} 자동 탑승 감지: 버스={}, 거리={}m, 감지횟수={}",
+                        state.getUserId(), closestBus.bus.getBusNumber(),
+                        Math.round(closestBus.distance), state.getBoardingDetectionCount());
 
                 // 탑승 처리
-                processBoarding(state, closestBus.bus);
-                return true;
+                return processBoarding(state, closestBus.bus);
             }
         } else {
             // 가까운 버스가 없으면 카운트 리셋
@@ -93,21 +146,20 @@ public class PassengerLocationService {
     }
 
     /**
-     * 하차 감지 처리
+     * 하차 감지 처리 - 정확도 개선
      */
     private boolean detectAlighting(PassengerState state, List<Bus> buses) {
         // 현재 탑승 중인 버스 찾기
-        Bus onBus = null;
-        for (Bus bus : buses) {
-            if (bus.getBusNumber().equals(state.getCurrentBusNumber())) {
-                onBus = bus;
-                break;
-            }
-        }
+        Bus onBus = buses.stream()
+                .filter(bus -> bus.getBusNumber().equals(state.getCurrentBusNumber()))
+                .findFirst()
+                .orElse(null);
 
         if (onBus == null) {
-            log.warn("승객 {}가 탑승 중인 버스 {}를 찾을 수 없습니다",
+            log.warn("승객 {}가 탑승 중인 버스 {}를 찾을 수 없어 강제 하차 처리",
                     state.getUserId(), state.getCurrentBusNumber());
+            state.setOnBus(false);
+            state.setCurrentBusNumber(null);
             return false;
         }
 
@@ -117,18 +169,25 @@ public class PassengerLocationService {
                 onBus.getLocation().getY(), onBus.getLocation().getX()
         );
 
-        // 거리가 임계값을 초과하면 하차 감지 카운트 증가
+        // **추가 검증 조건들**
+
+        // 1. 최소 여행 시간 확인 (너무 빨리 하차하는 것 방지)
+        if (!hasMinimumTripTime(state, MIN_TRIP_TIME_SECONDS)) {
+            return false;
+        }
+
+        // 2. 거리가 임계값을 초과하면 하차 감지 카운트 증가
         if (distance > AUTO_ALIGHTING_DISTANCE_THRESHOLD) {
             state.incrementAlightingDetectionCount();
 
-            // 연속 감지 횟수가 임계값을 초과하면 하차 처리
+            // 3. 연속 감지 횟수가 임계값을 초과하면 하차 처리
             if (state.getAlightingDetectionCount() >= CONSECUTIVE_DETECTION_THRESHOLD) {
-                log.info("승객 {} 자동 하차 감지: 버스={}, 거리={}m",
-                        state.getUserId(), onBus.getBusNumber(), distance);
+                log.info("승객 {} 자동 하차 감지: 버스={}, 거리={}m, 감지횟수={}",
+                        state.getUserId(), onBus.getBusNumber(),
+                        Math.round(distance), state.getAlightingDetectionCount());
 
                 // 하차 처리
-                processAlighting(state, onBus);
-                return true;
+                return processAlighting(state, onBus);
             }
         } else {
             // 버스와 거리가 가까우면 카운트 리셋
@@ -139,7 +198,40 @@ public class PassengerLocationService {
     }
 
     /**
-     * 가장 가까운 버스와 거리 찾기
+     * 버스가 정차 중인지 확인 (속도 기반)
+     */
+    private boolean isBusStationary(Bus bus) {
+        // 현재는 단순히 true 반환
+        // 향후 개선: 버스의 최근 위치 이력을 확인하여 속도 계산
+        return true;
+    }
+
+    /**
+     * 최소 체류 시간 확인
+     */
+    private boolean hasMinimumDwellTime(PassengerState state, long minSeconds) {
+        if (state.getLocationSetTime() == 0) {
+            return false;
+        }
+
+        long dwellTime = (System.currentTimeMillis() - state.getLocationSetTime()) / 1000;
+        return dwellTime >= minSeconds;
+    }
+
+    /**
+     * 최소 여행 시간 확인 (너무 빨리 하차하는 것 방지)
+     */
+    private boolean hasMinimumTripTime(PassengerState state, long minSeconds) {
+        if (state.getBoardingTime() == null) {
+            return true; // 탑승 시간을 모르면 통과
+        }
+
+        long tripTime = (System.currentTimeMillis() - state.getBoardingTime()) / 1000;
+        return tripTime >= minSeconds;
+    }
+
+    /**
+     * 가장 가까운 버스와 거리 찾기 - 성능 최적화
      */
     private BusDistance findClosestBus(PassengerState state, List<Bus> buses) {
         BusDistance closest = null;
@@ -163,9 +255,13 @@ public class PassengerLocationService {
     }
 
     /**
-     * 두 위치 사이의 거리 계산 (Haversine 공식)
+     * 두 위치 사이의 거리 계산 (Haversine 공식) - 최적화된 버전
      */
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        if (lat1 == lat2 && lon1 == lon2) {
+            return 0;
+        }
+
         final double R = 6371000; // 지구의 반지름 (미터)
 
         // 위도, 경도를 라디안으로 변환
@@ -192,52 +288,73 @@ public class PassengerLocationService {
     /**
      * 자동 탑승 처리
      */
-    private void processBoarding(PassengerState state, Bus bus) {
-        BusBoardingDTO boardingDTO = new BusBoardingDTO();
-        boardingDTO.setBusNumber(bus.getBusNumber());
-        boardingDTO.setOrganizationId(state.getOrganizationId());
-        boardingDTO.setUserId(state.getUserId());
-        boardingDTO.setAction(BusBoardingDTO.BoardingAction.BOARD);
-        boardingDTO.setTimestamp(System.currentTimeMillis());
+    private boolean processBoarding(PassengerState state, Bus bus) {
+        try {
+            BusBoardingDTO boardingDTO = new BusBoardingDTO();
+            boardingDTO.setBusNumber(bus.getBusNumber());
+            boardingDTO.setOrganizationId(state.getOrganizationId());
+            boardingDTO.setUserId(state.getUserId());
+            boardingDTO.setAction(BusBoardingDTO.BoardingAction.BOARD);
+            boardingDTO.setTimestamp(System.currentTimeMillis());
 
-        boolean success = busService.processBusBoarding(boardingDTO);
+            boolean success = busService.processBusBoarding(boardingDTO);
 
-        if (success) {
-            // 탑승 상태 업데이트
-            state.setOnBus(true);
-            state.setCurrentBusNumber(bus.getBusNumber());
-            state.resetBoardingDetectionCount();
-            state.resetAlightingDetectionCount();
+            if (success) {
+                // 탑승 상태 업데이트
+                state.setOnBus(true);
+                state.setCurrentBusNumber(bus.getBusNumber());
+                state.setBoardingTime(System.currentTimeMillis());
+                state.resetBoardingDetectionCount();
+                state.resetAlightingDetectionCount();
 
-            log.info("승객 {} 자동 탑승 처리 완료: 버스={}", state.getUserId(), bus.getBusNumber());
-        } else {
-            log.warn("승객 {} 자동 탑승 처리 실패: 버스={}", state.getUserId(), bus.getBusNumber());
+                log.info("승객 {} 자동 탑승 처리 완료: 버스={}", state.getUserId(), bus.getBusNumber());
+                return true;
+            } else {
+                log.warn("승객 {} 자동 탑승 처리 실패: 버스={} (좌석 부족 등)",
+                        state.getUserId(), bus.getBusNumber());
+                state.resetBoardingDetectionCount(); // 실패 시 카운트 리셋
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("자동 탑승 처리 중 오류 발생: 사용자={}, 버스={}, 오류={}",
+                    state.getUserId(), bus.getBusNumber(), e.getMessage());
+            return false;
         }
     }
 
     /**
      * 자동 하차 처리
      */
-    private void processAlighting(PassengerState state, Bus bus) {
-        BusBoardingDTO boardingDTO = new BusBoardingDTO();
-        boardingDTO.setBusNumber(bus.getBusNumber());
-        boardingDTO.setOrganizationId(state.getOrganizationId());
-        boardingDTO.setUserId(state.getUserId());
-        boardingDTO.setAction(BusBoardingDTO.BoardingAction.ALIGHT);
-        boardingDTO.setTimestamp(System.currentTimeMillis());
+    private boolean processAlighting(PassengerState state, Bus bus) {
+        try {
+            BusBoardingDTO boardingDTO = new BusBoardingDTO();
+            boardingDTO.setBusNumber(bus.getBusNumber());
+            boardingDTO.setOrganizationId(state.getOrganizationId());
+            boardingDTO.setUserId(state.getUserId());
+            boardingDTO.setAction(BusBoardingDTO.BoardingAction.ALIGHT);
+            boardingDTO.setTimestamp(System.currentTimeMillis());
 
-        boolean success = busService.processBusBoarding(boardingDTO);
+            boolean success = busService.processBusBoarding(boardingDTO);
 
-        if (success) {
-            // 하차 상태 업데이트
-            state.setOnBus(false);
-            state.setCurrentBusNumber(null);
-            state.resetBoardingDetectionCount();
-            state.resetAlightingDetectionCount();
+            if (success) {
+                // 하차 상태 업데이트
+                state.setOnBus(false);
+                state.setCurrentBusNumber(null);
+                state.setBoardingTime(null);
+                state.resetBoardingDetectionCount();
+                state.resetAlightingDetectionCount();
 
-            log.info("승객 {} 자동 하차 처리 완료: 버스={}", state.getUserId(), bus.getBusNumber());
-        } else {
-            log.warn("승객 {} 자동 하차 처리 실패: 버스={}", state.getUserId(), bus.getBusNumber());
+                log.info("승객 {} 자동 하차 처리 완료: 버스={}", state.getUserId(), bus.getBusNumber());
+                return true;
+            } else {
+                log.warn("승객 {} 자동 하차 처리 실패: 버스={}", state.getUserId(), bus.getBusNumber());
+                state.resetAlightingDetectionCount(); // 실패 시 카운트 리셋
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("자동 하차 처리 중 오류 발생: 사용자={}, 버스={}, 오류={}",
+                    state.getUserId(), bus.getBusNumber(), e.getMessage());
+            return false;
         }
     }
 
@@ -255,7 +372,7 @@ public class PassengerLocationService {
     }
 
     /**
-     * 승객 상태 정보를 담는 내부 클래스
+     * 승객 상태 정보를 담는 내부 클래스 - 개선된 버전
      */
     @Getter @Setter
     private static class PassengerState {
@@ -263,9 +380,11 @@ public class PassengerLocationService {
         private final String organizationId;
         private double latitude;
         private double longitude;
-        private long timestamp;
+        private long lastUpdateTime;
+        private long locationSetTime; // 현재 위치에 처음 도달한 시간
         private boolean onBus;
         private String currentBusNumber;
+        private Long boardingTime; // 탑승 시간
         private int boardingDetectionCount;
         private String pendingBusNumber;
         private int alightingDetectionCount;
@@ -278,12 +397,31 @@ public class PassengerLocationService {
             this.boardingDetectionCount = 0;
             this.pendingBusNumber = null;
             this.alightingDetectionCount = 0;
+            this.boardingTime = null;
         }
 
         void updateLocation(double latitude, double longitude, long timestamp) {
+            // 위치가 크게 변경되었으면 locationSetTime 갱신
+            if (this.latitude == 0 && this.longitude == 0) {
+                // 첫 번째 위치 설정
+                this.locationSetTime = timestamp;
+            } else {
+                double distance = calculateDistanceSimple(this.latitude, this.longitude, latitude, longitude);
+                if (distance > 20) { // 20m 이상 이동시 위치 변경으로 간주
+                    this.locationSetTime = timestamp;
+                }
+            }
+
             this.latitude = latitude;
             this.longitude = longitude;
-            this.timestamp = timestamp;
+            this.lastUpdateTime = timestamp;
+        }
+
+        private double calculateDistanceSimple(double lat1, double lon1, double lat2, double lon2) {
+            // 간단한 유클리드 거리 계산 (성능 최적화)
+            double deltaLat = lat1 - lat2;
+            double deltaLon = lon1 - lon2;
+            return Math.sqrt(deltaLat * deltaLat + deltaLon * deltaLon) * 111000; // 대략적인 미터 변환
         }
 
         void incrementBoardingDetectionCount(String busNumber) {
