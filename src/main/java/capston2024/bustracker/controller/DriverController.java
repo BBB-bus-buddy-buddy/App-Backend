@@ -2,8 +2,7 @@ package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
-import capston2024.bustracker.config.status.Role;
-import capston2024.bustracker.domain.User;
+import capston2024.bustracker.domain.Driver;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -16,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -98,7 +96,7 @@ public class DriverController {
      */
     @GetMapping
     @PreAuthorize("hasRole('STAFF')")
-    public ResponseEntity<ApiResponse<List<User>>> getDriversByOrganization(
+    public ResponseEntity<ApiResponse<List<Driver>>> getDriversByOrganization(
             @AuthenticationPrincipal OAuth2User principal) {
 
         log.info("조직별 기사 목록 조회 요청");
@@ -122,7 +120,7 @@ public class DriverController {
             throw new BusinessException("조직에 속하지 않은 사용자는 기사 정보를 조회할 수 없습니다.");
         }
 
-        List<User> drivers = driverService.getDriversByOrganizationId(organizationId);
+        List<Driver> drivers = driverService.getDriversByOrganizationId(organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(drivers,
                 String.format("조직의 모든 기사가 성공적으로 조회되었습니다. (총 %d명)", drivers.size())));
@@ -133,7 +131,7 @@ public class DriverController {
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
-    public ResponseEntity<ApiResponse<User>> getDriverById(
+    public ResponseEntity<ApiResponse<Driver>> getDriverById(
             @PathVariable String id,
             @AuthenticationPrincipal OAuth2User principal) {
 
@@ -158,7 +156,7 @@ public class DriverController {
             throw new BusinessException("조직에 속하지 않은 사용자는 기사 정보를 조회할 수 없습니다.");
         }
 
-        User driver = driverService.getDriverByIdAndOrganizationId(id, organizationId);
+        Driver driver = driverService.getDriverByIdAndOrganizationId(id, organizationId);
 
         return ResponseEntity.ok(new ApiResponse<>(driver, "기사 정보가 성공적으로 조회되었습니다."));
     }
