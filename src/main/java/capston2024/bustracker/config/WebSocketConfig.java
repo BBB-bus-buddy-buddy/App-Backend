@@ -12,6 +12,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
+
     @Autowired
     private BusDriverWebSocketHandler busDriverWebSocketHandler;
 
@@ -20,12 +21,14 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        // 버스 기사용 웹소켓 엔드포인트
+        // 버스 기사용 웹소켓 엔드포인트 - 보안 강화
         registry.addHandler(busDriverWebSocketHandler, "/ws/driver")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*")
+                .addInterceptors(new ConnectionLimitInterceptor()); // 연결 제한 추가
 
-        // 승객용 웹소켓 엔드포인트
+        // 승객용 웹소켓 엔드포인트 - 보안 강화
         registry.addHandler(busPassengerWebSocketHandler, "/ws/passenger")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*")
+                .addInterceptors(new ConnectionLimitInterceptor()); // 연결 제한 추가
     }
 }
