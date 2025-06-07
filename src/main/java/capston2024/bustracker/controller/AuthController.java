@@ -207,7 +207,23 @@ public class AuthController {
             );
         }
     }
-//    ✅미사용 API(프로젝트 MVP 미해당에 따른 검증절차 임시 스킵)
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiResponse<Boolean>> handleUnauthorizedException(UnauthorizedException ex) {
+        log.error("인가되지 않은 리소스: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiResponse<>(false, ex.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiResponse<Boolean>> handleResourceNotFoundException(ResourceNotFoundException ex) {
+        log.error("찾을 수 없는 리소스: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiResponse<>(false, ex.getMessage()));
+    }
+
+
+    //    ✅미사용 API(프로젝트 MVP 미해당에 따른 검증절차 임시 스킵)
 //    @PostMapping("/driver-verify-and-rankup")
 //    @Operation(summary = "운전면허 검증 및 권한 업그레이드",
 //            description = "운전면허 진위를 확인하고 드라이버 권한으로 업그레이드합니다.")
@@ -270,18 +286,4 @@ public class AuthController {
 //            );
 //        }
 //    }
-
-    @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<ApiResponse<Boolean>> handleUnauthorizedException(UnauthorizedException ex) {
-        log.error("인가되지 않은 리소스: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new ApiResponse<>(false, ex.getMessage()));
-    }
-
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ApiResponse<Boolean>> handleResourceNotFoundException(ResourceNotFoundException ex) {
-        log.error("찾을 수 없는 리소스: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiResponse<>(false, ex.getMessage()));
-    }
 }
