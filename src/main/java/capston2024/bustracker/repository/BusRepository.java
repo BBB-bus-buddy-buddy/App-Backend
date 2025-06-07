@@ -26,13 +26,16 @@ public interface BusRepository extends MongoRepository<Bus, String> {
     // 실제 버스 번호 중복 체크 (조직 내)
     boolean existsByBusRealNumberAndOrganizationId(String busRealNumber, String organizationId);
 
-    // 운행 중인 버스만 조회
+    // 운행 상태별 조회
     List<Bus> findByOrganizationIdAndIsOperateTrue(String organizationId);
-
+    List<Bus> findByOrganizationIdAndIsOperateFalse(String organizationId);
     // 라우트 ID로 버스 조회
     @Query("{'routeId.$id': ?0}")
     List<Bus> findByRouteId(String routeId);
 
     // 운행 상태별 버스 조회
     List<Bus> findByOrganizationIdAndIsOperate(String organizationId, boolean isOperate);
+
+    long countByOrganizationIdAndIsOperateTrue(String organizationId);
+    long countByIsOperateTrue(); // 전체 운행 중인 버스 수
 }
