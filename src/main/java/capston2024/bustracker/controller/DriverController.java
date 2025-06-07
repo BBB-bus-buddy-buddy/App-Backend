@@ -1,10 +1,7 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
-import capston2024.bustracker.config.status.Role;
 import capston2024.bustracker.domain.Driver;
-import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
@@ -17,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

@@ -3,7 +3,6 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.CodeRequestDTO;
 import capston2024.bustracker.config.dto.DriverUpgradeRequestDTO;
-import capston2024.bustracker.config.dto.LicenseVerifyRequestDto;
 import capston2024.bustracker.domain.Driver;
 import capston2024.bustracker.domain.auth.DriverCreator;
 import capston2024.bustracker.exception.BusinessException;
