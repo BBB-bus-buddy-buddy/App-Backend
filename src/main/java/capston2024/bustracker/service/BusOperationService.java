@@ -16,13 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.*;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -344,5 +342,107 @@ public class BusOperationService {
         }
 
         return dto;
+    }
+
+    /**
+     * 특정 운전자의 오늘 운행 일정 조회
+     */
+    public List<OperationPlanDTO> getDriverTodayOperationPlans(String driverEmail, String organizationId) {
+        log.info("운전자 오늘 운행 일정 조회 - 운전자 이메일: {}, 조직: {}", driverEmail, organizationId);
+
+        // 이메일로 운전자 User 조회
+        User driver = userRepository.findByEmail(driverEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("운전자를 찾을 수 없습니다: " + driverEmail));
+
+        // 운전자 권한 확인
+        if (!driver.getRoleKey().equals("ROLE_DRIVER")) {
+            throw new BusinessException("운전자 권한이 없는 사용자입니다.");
+        }
+
+        // 오늘 날짜의 시작과 끝
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
+
+        // 해당 운전자의 오늘 운행 일정 조회
+        List<BusOperation> operations = busOperationRepository
+                .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
+                .stream()
+                .filter(op -> !op.getScheduledStart().isBefore(startOfDay)
+                        && !op.getScheduledStart().isAfter(endOfDay))
+                .collect(Collectors.toList());
+
+        return operations.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 특정 운전자의 특정 날짜 운행 일정 조회
+     */
+    public List<OperationPlanDTO> getDriverOperationPlansByDate(String driverEmail, LocalDate date, String organizationId) {
+        log.info("운전자 특정 날짜 운행 일정 조회 - 날짜: {}, 운전자 이메일: {}, 조직: {}", date, driverEmail, organizationId);
+
+        // 이메일로 운전자 User 조회
+        User driver = userRepository.findByEmail(driverEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("운전자를 찾을 수 없습니다: " + driverEmail));
+
+        // 운전자 권한 확인
+        if (!driver.getRoleKey().equals("ROLE_DRIVER")) {
+            throw new BusinessException("운전자 권한이 없는 사용자입니다.");
+        }
+
+        // 특정 날짜의 시작과 끝
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+
+        // 해당 운전자의 특정 날짜 운행 일정 조회
+        List<BusOperation> operations = busOperationRepository
+                .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
+                .stream()
+                .filter(op -> !op.getScheduledStart().isBefore(startOfDay)
+                        && !op.getScheduledStart().isAfter(endOfDay))
+                .collect(Collectors.toList());
+
+        return operations.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 특정 운전자의 월간 운행 일정 조회
+     */
+    public List<OperationPlanDTO> getDriverMonthlyOperationPlans(String driverEmail, int year, int month, String organizationId) {
+        log.info("운전자 월간 운행 일정 조회 - 년월: {}-{}, 운전자 이메일: {}, 조직: {}", year, month, driverEmail, organizationId);
+
+        // 이메일로 운전자 User 조회
+        User driver = userRepository.findByEmail(driverEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("운전자를 찾을 수 없습니다: " + driverEmail));
+
+        // 운전자 권한 확인
+        if (!driver.getRoleKey().equals("ROLE_DRIVER")) {
+            throw new BusinessException("운전자 권한이 없는 사용자입니다.");
+        }
+
+        // 해당 월의 시작과 끝 날짜 계산
+        LocalDate startOfMonth = LocalDate.of(year, month, 1);
+        LocalDate endOfMonth = startOfMonth.with(TemporalAdjusters.lastDayOfMonth());
+
+        LocalDateTime start = startOfMonth.atStartOfDay();
+        LocalDateTime end = endOfMonth.atTime(LocalTime.MAX);
+
+        // 해당 운전자의 월간 운행 일정 조회
+        List<BusOperation> operations = busOperationRepository
+                .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
+                .stream()
+                .filter(op -> !op.getScheduledStart().isBefore(start)
+                        && !op.getScheduledStart().isAfter(end))
+                .collect(Collectors.toList());
+
+        log.info("운전자 월간 운행 일정 조회 완료 - 총 {}개 일정", operations.size());
+
+        return operations.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
     }
 }
