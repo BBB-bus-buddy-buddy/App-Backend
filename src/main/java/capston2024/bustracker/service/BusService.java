@@ -717,7 +717,7 @@ public class BusService {
     /**
      * 두 위치 사이의 거리 계산 (Haversine 공식)
      */
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    public double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         final double R = 6371000; // 지구의 반지름 (미터)
 
         // 위도, 경도를 라디안으로 변환
