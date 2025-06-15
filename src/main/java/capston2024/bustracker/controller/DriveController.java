@@ -216,4 +216,45 @@ public class DriveController {
             return ResponseEntity.ok(new ApiResponse<>(null, "다음 운행 일정이 없습니다."));
         }
     }
+
+    /**
+     * 운행 상태 조회
+     * 프론트엔드 drive.js의 getDriveStatus와 호환
+     */
+    @GetMapping("/status/{operationId}")
+    @PreAuthorize("hasRole('DRIVER')")
+    @Operation(summary = "운행 상태 조회",
+            description = "특정 운행 일정의 현재 상태를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "운행 상태 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (운전자 권한 필요)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "운행 일정을 찾을 수 없음")
+    })
+    @SecurityRequirement(name = "Bearer Authentication")
+    public ResponseEntity<ApiResponse<DriveStatusDTO>> getDriveStatus(
+            @Parameter(description = "운행 일정 ID") @PathVariable String operationId,
+            @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal) {
+
+        if (principal == null) {
+            throw new UnauthorizedException("인증된 사용자만 운행 상태를 조회할 수 있습니다.");
+        }
+
+        Map<String, Object> userInfo = authService.getUserDetails(principal);
+        String driverId = (String) userInfo.get("email");
+        String organizationId = (String) userInfo.get("organizationId");
+        String role = (String) userInfo.get("role");
+
+        // 운전자 권한 확인
+        if (!"ROLE_DRIVER".equals(role)) {
+            throw new UnauthorizedException("운전자 권한이 필요합니다.");
+        }
+
+        log.info("운행 상태 조회 - 운전자: {}, 운행일정ID: {}", driverId, operationId);
+
+        DriveStatusDTO driveStatus = driveService.getDriveStatus(operationId, driverId, organizationId);
+
+        return ResponseEntity.ok(new ApiResponse<>(driveStatus, "운행 상태가 성공적으로 조회되었습니다."));
+    }
 }
