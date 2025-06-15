@@ -34,7 +34,7 @@ import java.util.Map;
 @RequestMapping("/api/operation-plan")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Bus Operation", description = "버스 운행 일정 관리 API")
+@Tag(name = "Bus Operation Plan", description = "버스 운행 일정 관리 API - 프론트엔드 호환")
 public class BusOperationController {
 
     private final BusOperationService busOperationService;
