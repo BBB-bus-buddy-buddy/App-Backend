@@ -97,6 +97,32 @@ public class OrganizationController {
     }
 
     /**
+     * 조직 정보 조회
+     */
+    @GetMapping("/{organizationId}")
+    @Operation(summary = "조직 정보 조회",
+            description = "조직 ID로 조직의 상세 정보를 조회합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조직 정보 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않는 조직")
+    })
+    public ResponseEntity<ApiResponse<Organization>> getOrganizationInfo(
+            @Parameter(description = "조직 ID") @PathVariable String organizationId) {
+
+        log.info("조직 정보 조회 요청 - 조직 ID: {}", organizationId);
+
+        try {
+            Organization organization = organizationService.getOrganization(organizationId); // 🔄 기존 메서드 재사용
+
+            return ResponseEntity.ok(new ApiResponse<>(organization, "조직 정보가 성공적으로 조회되었습니다."));
+
+        } catch (Exception e) {
+            log.error("조직 정보 조회 중 오류: {}", e.getMessage(), e);
+            throw e; // 전역 예외 핸들러가 처리
+        }
+    }
+
+    /**
      * 모든 조직 목록 조회
      */
     @GetMapping("/all")

@@ -41,6 +41,12 @@ public class DriveService {
     private final BusService busService;
     private final KakaoApiService kakaoApiService;
 
+    // 운행 상태 상수 - 프론트엔드 DRIVE_STATUS와 매칭
+    public static final String DRIVE_STATUS_SCHEDULED = "SCHEDULED";      // 예정됨
+    public static final String DRIVE_STATUS_IN_PROGRESS = "IN_PROGRESS";  // 진행 중
+    public static final String DRIVE_STATUS_COMPLETED = "COMPLETED";      // 완료됨
+    public static final String DRIVE_STATUS_CANCELLED = "CANCELLED";      // 취소됨
+
     // 출발지 도착 허용 반경 (미터)
     private static final double ARRIVAL_THRESHOLD_METERS = 50.0;
     // 조기 출발 허용 시간 (분)
@@ -63,7 +69,7 @@ public class DriveService {
                 .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + requestDTO.getOperationId()));
 
         // 3. 운행 상태 확인
-        if (!"SCHEDULED".equals(operation.getStatus())) {
+        if (!DRIVE_STATUS_SCHEDULED.equals(operation.getStatus())) {
             throw new BusinessException("이미 시작되었거나 완료된 운행입니다. 현재 상태: " + operation.getStatus());
         }
 
@@ -108,7 +114,7 @@ public class DriveService {
         busRepository.save(bus);
 
         // 10. 운행 상태 업데이트 - BusOperation의 status를 IN_PROGRESS로
-        operation.setStatus("IN_PROGRESS");
+        operation.setStatus(DRIVE_STATUS_IN_PROGRESS);
         operation.setActualStart(now); // 실제 시작 시간 기록
         busOperationRepository.save(operation);
 
@@ -133,7 +139,7 @@ public class DriveService {
                 .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + requestDTO.getOperationId()));
 
         // 3. 운행 상태 확인
-        if (!"IN_PROGRESS".equals(operation.getStatus())) {
+        if (!DRIVE_STATUS_IN_PROGRESS.equals(operation.getStatus())) {
             throw new BusinessException("진행 중인 운행이 아닙니다. 현재 상태: " + operation.getStatus());
         }
 
@@ -159,7 +165,7 @@ public class DriveService {
         busRepository.save(bus);
 
         // 8. 운행 상태 업데이트 - BusOperation의 status를 COMPLETED로
-        operation.setStatus("COMPLETED");
+        operation.setStatus(DRIVE_STATUS_COMPLETED);
         operation.setActualEnd(LocalDateTime.now()); // 실제 종료 시간 기록
         busOperationRepository.save(operation);
 
@@ -184,7 +190,7 @@ public class DriveService {
                 .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + requestDTO.getOperationId()));
 
         // 2. 운행 상태 확인
-        if (!"IN_PROGRESS".equals(operation.getStatus())) {
+        if (!DRIVE_STATUS_IN_PROGRESS.equals(operation.getStatus())) {
             throw new BusinessException("진행 중인 운행이 아닙니다. 현재 상태: " + operation.getStatus());
         }
 
@@ -255,7 +261,7 @@ public class DriveService {
                 .stream()
                 .filter(op -> op.getScheduledStart().isAfter(now) &&
                         op.getScheduledStart().isBefore(endOfDay) &&
-                        "SCHEDULED".equals(op.getStatus()) &&
+                        DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
                         op.getBusId().getId().toString().equals(bus.getId()))
                 .sorted((a, b) -> a.getScheduledStart().compareTo(b.getScheduledStart()))
                 .toList();
@@ -271,6 +277,83 @@ public class DriveService {
         nextDrive.setHasNextDrive(true);
 
         return nextDrive;
+    }
+
+    /**
+     * 운행 상태 조회 - 프론트엔드 drive.js의 getDriveStatus와 호환
+     */
+    public DriveStatusDTO getDriveStatus(String operationId, String driverEmail, String organizationId) {
+        log.info("운행 상태 조회 - 운행ID: {}, 운전자: {}", operationId, driverEmail);
+
+        // 1. 운전자 정보 조회
+        User driver = userRepository.findByEmail(driverEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("운전자를 찾을 수 없습니다: " + driverEmail));
+
+        // 2. 운행 일정 조회 및 검증
+        BusOperation operation = busOperationRepository
+                .findByIdAndOrganizationId(operationId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + operationId));
+
+        // 3. 운전자 확인
+        if (!operation.getDriverId().getId().toString().equals(driver.getId())) {
+            throw new BusinessException("해당 운행의 배정된 운전자가 아닙니다.");
+        }
+
+        // 4. 버스 정보 조회
+        String busId = operation.getBusId().getId().toString();
+        Bus bus = busRepository.findById(busId)
+                .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + busId));
+
+        // 5. 상태에 따른 메시지 생성
+        String message = switch (operation.getStatus()) {
+            case DRIVE_STATUS_SCHEDULED -> "운행 예정입니다.";
+            case DRIVE_STATUS_IN_PROGRESS -> "운행 중입니다.";
+            case DRIVE_STATUS_COMPLETED -> "운행이 완료되었습니다.";
+            case DRIVE_STATUS_CANCELLED -> "운행이 취소되었습니다.";
+            default -> "알 수 없는 상태입니다.";
+        };
+
+        // 6. 응답 DTO 생성
+        return buildDriveStatusDTO(operation, bus, driver, false, message);
+    }
+
+    /**
+     * 운행 시작 가능 여부 확인 - 프론트엔드의 canStartDrive 헬퍼 함수와 호환
+     */
+    public Map<String, Object> canStartDrive(String operationId, String driverEmail, String organizationId,
+                                             boolean allowEarlyStart, int earlyStartMinutes) {
+        BusOperation operation = busOperationRepository
+                .findByIdAndOrganizationId(operationId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + operationId));
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime scheduledStart = operation.getScheduledStart();
+
+        Map<String, Object> result = new HashMap<>();
+
+        if (allowEarlyStart) {
+            LocalDateTime earliestStart = scheduledStart.minusMinutes(earlyStartMinutes);
+
+            if (now.isBefore(earliestStart)) {
+                long minutesUntilEarly = java.time.Duration.between(now, earliestStart).toMinutes();
+                result.put("canStart", false);
+                result.put("message", String.format("조기 출발은 %d분 후부터 가능합니다.", minutesUntilEarly));
+            } else {
+                result.put("canStart", true);
+                result.put("message", "조기 출발이 가능합니다.");
+            }
+        } else {
+            if (now.isBefore(scheduledStart)) {
+                long minutesUntilStart = java.time.Duration.between(now, scheduledStart).toMinutes();
+                result.put("canStart", false);
+                result.put("message", String.format("출발 시간까지 %d분 남았습니다.", minutesUntilStart));
+            } else {
+                result.put("canStart", true);
+                result.put("message", "운행을 시작할 수 있습니다.");
+            }
+        }
+
+        return result;
     }
 
     /**
