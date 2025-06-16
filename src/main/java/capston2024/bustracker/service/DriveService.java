@@ -88,16 +88,13 @@ public class DriveService {
             throw new BusinessException("이미 운행 중인 버스입니다: " + bus.getBusNumber());
         }
 
-        // 7. 출발 시간 검증
+        // 7. 출발 시간 검증 - 조기 출발 시간 제한 제거
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime scheduledStart = operation.getScheduledStart();
 
         if (requestDTO.isEarlyStart()) {
-            // 조기 출발인 경우 허용 시간 확인
-            LocalDateTime earliestAllowed = scheduledStart.minusMinutes(EARLY_START_ALLOWED_MINUTES);
-            if (now.isBefore(earliestAllowed)) {
-                throw new BusinessException(String.format("조기 출발은 예정 시간 %d분 전부터만 가능합니다.", EARLY_START_ALLOWED_MINUTES));
-            }
+            // 조기 출발 - 시간 제한 없음
+            log.info("조기 출발 - 예정 시간: {}, 현재 시간: {}", scheduledStart, now);
         } else {
             // 정상 출발인 경우 정각 이후인지 확인
             if (now.isBefore(scheduledStart)) {
