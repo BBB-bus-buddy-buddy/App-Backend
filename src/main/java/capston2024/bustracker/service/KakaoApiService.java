@@ -125,12 +125,12 @@ public class KakaoApiService {
                         bus.getLocation().getX(), // 경도
                         bus.getLocation().getY())) // 위도
                 .destination(new KakaoPoint(
-                        targetStation.getLocation().getX(), // longitude
-                        targetStation.getLocation().getY())) // latitude
+                        targetStation.getLocation().getY(), // longitude
+                        targetStation.getLocation().getX())) // latitude
                 .waypoints(waypoints.stream()
                         .map(station -> new KakaoPoint(
-                                station.getLocation().getX(), // longitude
-                                station.getLocation().getY())) // latitude
+                                station.getLocation().getY(), // longitude
+                                station.getLocation().getX())) // latitude
                         .collect(Collectors.toList()))
                 .priority("RECOMMEND")
                 .build();
