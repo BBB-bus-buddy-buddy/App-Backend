@@ -42,7 +42,8 @@ public class RouteController {
     private final AuthService authService;
 
     /**
-     * 조직 ID로 라우트 조회 (검색 기능 포함)
+     * 조직 라우트 조회
+     * 검색어가 있으면 검색, 없으면 전체 조회
      */
     @GetMapping
     @Operation(summary = "조직 라우트 목록 조회",
@@ -59,7 +60,7 @@ public class RouteController {
             @Parameter(description = "라우트 이름 검색어 (선택사항)") @RequestParam(required = false) String name) {
 
         if (principal == null) {
-            log.warn("No authenticated user found");
+            log.warn("인증된 사용자를 찾을 수 없음");
             throw new UnauthorizedException("인증된 사용자만 라우트를 조회할 수 있습니다.");
         }
 
@@ -70,20 +71,28 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 조회할 수 없습니다.");
         }
 
-        log.info("라우트 조회 요청 - 조직 ID: {}, 검색어: {}", organizationId, name);
+        log.info("📍 라우트 조회 요청 - 조직 ID: {}, 검색어: '{}'", organizationId, name);
 
         List<RouteDTO> routes;
+        String responseMessage;
+
         if (name != null && !name.trim().isEmpty()) {
-            routes = routeService.searchRoutesByNameAndOrganizationId(name, organizationId);
-            return ResponseEntity.ok(new ApiResponse<>(routes, "라우트 검색 결과입니다."));
+            // 🔍 검색 모드
+            routes = routeService.searchRoutesByNameAndOrganizationId(name.trim(), organizationId);
+            responseMessage = String.format("'%s' 검색 결과 %d개 라우트가 조회되었습니다.", name.trim(), routes.size());
+            log.info("🔍 라우트 검색 완료 - 검색어: '{}', 결과: {}개", name.trim(), routes.size());
         } else {
+            // 📋 전체 조회 모드
             routes = routeService.getAllRoutesByOrganizationId(organizationId);
-            return ResponseEntity.ok(new ApiResponse<>(routes, "조직의 모든 라우트 조회 결과입니다."));
+            responseMessage = String.format("조직의 전체 라우트 %d개가 조회되었습니다.", routes.size());
+            log.info("📋 전체 라우트 조회 완료 - 총 {}개", routes.size());
         }
+
+        return ResponseEntity.ok(new ApiResponse<>(routes, responseMessage));
     }
 
     /**
-     * 특정 라우트 상세 조회
+     * 특정 라우트 상세 조회 - 프론트엔드 완벽 호환 ✅
      */
     @GetMapping("/{id}")
     @Operation(summary = "특정 라우트 상세 조회",
@@ -111,13 +120,19 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 조회할 수 없습니다.");
         }
 
-        log.info("라우트 상세 조회 요청 - ID: {}, 조직 ID: {}", id, organizationId);
+        log.info("🔍 라우트 상세 조회 - ID: {}, 조직: {}", id, organizationId);
+
         RouteDTO route = routeService.getRouteById(id, organizationId);
-        return ResponseEntity.ok(new ApiResponse<>(route, "라우트 조회 결과입니다."));
+
+        log.info("✅ 라우트 조회 성공 - 이름: '{}', 정류장: {}개",
+                route.getRouteName(), route.getStations().size());
+
+        return ResponseEntity.ok(new ApiResponse<>(route,
+                String.format("라우트 '%s' 조회가 완료되었습니다.", route.getRouteName())));
     }
 
     /**
-     * 새로운 라우트 생성
+     * 새로운 라우트 생성 (관리자용)
      */
     @PostMapping
     @PreAuthorize("hasRole('STAFF')")
@@ -147,14 +162,21 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 생성할 수 없습니다.");
         }
 
-        log.info("라우트 생성 요청 - 라우트 이름: {}, 조직 ID: {}", requestDTO.getRouteName(), organizationId);
+        log.info("🚌 라우트 생성 요청 - 이름: '{}', 정류장: {}개, 조직: {}",
+                requestDTO.getRouteName(), requestDTO.getStations().size(), organizationId);
+
         RouteDTO createdRoute = routeService.createRoute(principal, requestDTO);
+
+        log.info("✅ 라우트 생성 완료 - ID: {}, 이름: '{}'",
+                createdRoute.getId(), createdRoute.getRouteName());
+
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ApiResponse<>(createdRoute, "라우트가 성공적으로 생성되었습니다."));
+                .body(new ApiResponse<>(createdRoute,
+                        String.format("라우트 '%s'가 성공적으로 생성되었습니다.", createdRoute.getRouteName())));
     }
 
     /**
-     * 라우트 수정
+     * 라우트 수정 (관리자용)
      */
     @PutMapping
     @PreAuthorize("hasRole('STAFF')")
@@ -185,7 +207,7 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 수정할 수 없습니다.");
         }
 
-        log.info("라우트 수정 요청 - 기존 이름: {}, 새 이름: {}, 조직 ID: {}",
+        log.info("✏️ 라우트 수정 요청 - 기존: '{}' → 신규: '{}', 조직: {}",
                 updateDTO.getPrevRouteName(), updateDTO.getNewRouteName(), organizationId);
 
         // RouteRequestDTO로 변환
@@ -206,11 +228,14 @@ public class RouteController {
         RouteDTO updatedRoute = routeService.updateRouteByNameAndOrganizationId(
                 updateDTO.getPrevRouteName(), organizationId, requestDTO);
 
-        return ResponseEntity.ok(new ApiResponse<>(updatedRoute, "라우트가 성공적으로 수정되었습니다."));
+        log.info("✅ 라우트 수정 완료 - 이름: '{}'", updatedRoute.getRouteName());
+
+        return ResponseEntity.ok(new ApiResponse<>(updatedRoute,
+                String.format("라우트 '%s'가 성공적으로 수정되었습니다.", updatedRoute.getRouteName())));
     }
 
     /**
-     * 라우트 삭제
+     * 라우트 삭제 (관리자용)
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('STAFF')")
@@ -239,8 +264,12 @@ public class RouteController {
             throw new BusinessException("조직에 속하지 않은 사용자는 라우트를 삭제할 수 없습니다.");
         }
 
-        log.info("라우트 삭제 요청 - ID: {}, 조직 ID: {}", id, organizationId);
+        log.info("🗑️ 라우트 삭제 요청 - ID: {}, 조직: {}", id, organizationId);
+
         routeService.deleteRoute(id, principal);
+
+        log.info("✅ 라우트 삭제 완료 - ID: {}", id);
+
         return ResponseEntity.ok(new ApiResponse<>(null, "라우트가 성공적으로 삭제되었습니다."));
     }
 
@@ -249,7 +278,7 @@ public class RouteController {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
-        log.error("비즈니스 예외 발생: {}", ex.getMessage());
+        log.error("🚨 비즈니스 예외 발생: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
@@ -259,7 +288,7 @@ public class RouteController {
      */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFoundException(ResourceNotFoundException ex) {
-        log.error("리소스 찾을 수 없음: {}", ex.getMessage());
+        log.error("🔍 리소스 찾을 수 없음: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
@@ -269,7 +298,7 @@ public class RouteController {
      */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnauthorizedException(UnauthorizedException ex) {
-        log.error("인증 예외 발생: {}", ex.getMessage());
+        log.error("🔐 인증 예외 발생: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }

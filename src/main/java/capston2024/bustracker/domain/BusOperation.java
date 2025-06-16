@@ -29,6 +29,8 @@ public class BusOperation {
 
     private LocalDateTime scheduledEnd;
 
+    private LocalDateTime actualStart;
+
     private LocalDateTime actualEnd;
 
     private String status; // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED

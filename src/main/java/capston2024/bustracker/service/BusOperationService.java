@@ -153,15 +153,25 @@ public class BusOperationService {
                 .collect(Collectors.toList());
     }
 
+    // BusOperationService.java의 getOperationPlanDetail 메서드 수정
+
     /**
      * 특정 운행 일정 상세 조회
+     * operationId 또는 id로 조회 가능하도록 수정
      */
     public OperationPlanDTO getOperationPlanDetail(String id, String organizationId) {
         log.info("운행 일정 상세 조회 - ID: {}, 조직: {}", id, organizationId);
 
+        // 먼저 operationId로 조회 시도
         BusOperation operation = busOperationRepository
-                .findByIdAndOrganizationId(id, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + id));
+                .findByOperationIdAndOrganizationId(id, organizationId)
+                .orElseGet(() -> {
+                    // operationId로 찾지 못한 경우 MongoDB _id로 재시도
+                    log.info("operationId로 조회 실패, MongoDB _id로 재시도: {}", id);
+                    return busOperationRepository
+                            .findByIdAndOrganizationId(id, organizationId)
+                            .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + id));
+                });
 
         return convertToDTO(operation);
     }
