@@ -278,7 +278,7 @@ public class BusService {
 
         // 버스의 라우트 ID 확인
         if (bus.getRouteId() == null) {
-            throw new BusinessException("버스에 할당된 노선이햣 ㄴ 없습니다.");
+            throw new BusinessException("버스에 할당된 노선이 없습니다.");
         }
 
         String routeId = bus.getRouteId().getId().toString();
