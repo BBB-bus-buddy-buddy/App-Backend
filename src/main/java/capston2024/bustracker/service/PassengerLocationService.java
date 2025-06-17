@@ -334,7 +334,7 @@ public class PassengerLocationService {
         // 현재는 모든 버스가 정차 중이라고 가정
         return 0.0;
     }
-
+          
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         if (lat1 == lat2 && lon1 == lon2) return 0;
         final double R = 6371000;
@@ -412,7 +412,7 @@ public class PassengerLocationService {
             boolean success = busService.processBusBoarding(boardingDTO);
 
             log.info("🎯 [하차처리] BusService.processBusBoarding 호출 결과: {}", success);
-
+          
             if (success) {
                 state.setOnBus(false);
                 state.setCurrentBusNumber(null);

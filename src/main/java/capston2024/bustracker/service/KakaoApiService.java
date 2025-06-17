@@ -122,8 +122,8 @@ public class KakaoApiService {
     private KakaoDirectionsResponse requestRouteEstimate(Bus bus, Station targetStation, List<Station> waypoints) {
         KakaoDirectionsRequest request = KakaoDirectionsRequest.builder()
                 .origin(new KakaoPoint(
-                        bus.getLocation().getY(), // longitude
-                        bus.getLocation().getX())) // latitude
+                        bus.getLocation().getX(), // 경도
+                        bus.getLocation().getY())) // 위도
                 .destination(new KakaoPoint(
                         targetStation.getLocation().getY(), // longitude
                         targetStation.getLocation().getX())) // latitude
