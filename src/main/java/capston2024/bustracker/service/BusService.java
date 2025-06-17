@@ -453,6 +453,43 @@ public class BusService {
     }
 
     /**
+     * 조직의 운행 중인 버스들의 실시간 위치 정보 조회
+     * PassengerLocationService에서 사용하기 위한 메서드
+     * @param organizationId 조직 ID
+     * @return 운행 중인 버스들의 실시간 위치 맵
+     */
+    public Map<String, BusRealTimeLocationDTO> getCurrentBusLocations(String organizationId) {
+        Map<String, BusRealTimeLocationDTO> currentLocations = new HashMap<>();
+
+        // 1. 메모리에 있는 실시간 위치 정보 확인
+        for (Map.Entry<String, BusRealTimeLocationDTO> entry : pendingLocationUpdates.entrySet()) {
+            if (entry.getValue().getOrganizationId().equals(organizationId)) {
+                currentLocations.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        // 2. DB에서 운행 중인 버스 정보 조회 (메모리에 없는 버스들)
+        List<Bus> operatingBuses = busRepository.findByOrganizationIdAndIsOperateTrue(organizationId);
+        for (Bus bus : operatingBuses) {
+            if (!currentLocations.containsKey(bus.getBusNumber()) && bus.getLocation() != null) {
+                BusRealTimeLocationDTO locationDTO = new BusRealTimeLocationDTO();
+                locationDTO.setBusNumber(bus.getBusNumber());
+                locationDTO.setOrganizationId(organizationId);
+                locationDTO.setLatitude(bus.getLocation().getY());
+                locationDTO.setLongitude(bus.getLocation().getX());
+                locationDTO.setOccupiedSeats(bus.getOccupiedSeats());
+                locationDTO.setTimestamp(bus.getTimestamp() != null ?
+                        bus.getTimestamp().toEpochMilli() : System.currentTimeMillis());
+
+                currentLocations.put(bus.getBusNumber(), locationDTO);
+            }
+        }
+
+        log.debug("조직 {}의 실시간 버스 위치 조회: {}대", organizationId, currentLocations.size());
+        return currentLocations;
+    }
+
+    /**
      * 버스 객체를 StatusDTO로 변환
      */
     private BusRealTimeStatusDTO convertToStatusDTO(Bus bus) {
@@ -548,10 +585,10 @@ public class BusService {
     }
 
     /**
-     * 정기적으로 버스 위치 업데이트 적용 (10초마다)
+     * 정기적으로 버스 위치 업데이트 적용 (3초마다로 변경)
      * WebSocket으로 받은 위치 정보를 DB에 반영하는 핵심 메서드
      */
-    @Scheduled(fixedRate = 10000)
+    @Scheduled(fixedRate = 3000) // 10초에서 3초로 단축
     public void flushLocationUpdates() {
         List<BusRealTimeLocationDTO> updates;
 
@@ -687,7 +724,7 @@ public class BusService {
                 successCount, failCount, skipCount, elapsedTime);
 
         // 4. 성능 모니터링
-        if (elapsedTime > 5000) { // 5초 이상 걸린 경우 경고
+        if (elapsedTime > 2000) { // 2초 이상 걸린 경우 경고
             log.warn("⚠️ [BusService] 위치 업데이트 처리 시간이 길어졌습니다: {} ms", elapsedTime);
         }
     }
