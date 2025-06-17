@@ -2,6 +2,8 @@ package capston2024.bustracker.handler;
 
 import capston2024.bustracker.config.ConnectionLimitInterceptor;
 import capston2024.bustracker.config.dto.BusRealTimeLocationDTO;
+import capston2024.bustracker.config.dto.BusSeatDTO;
+import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.service.BusService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -158,6 +160,15 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     case "bus_status_update":
                         handleBusStatusUpdate(session, messageData);
                         break;
+                    case "get_seat_info":
+                        handleGetSeatInfo(session, messageData);
+                        break;
+                    case "reset_seats":
+                        handleResetSeats(session, messageData);
+                        break;
+                    case "manual_seat_update":
+                        handleManualSeatUpdate(session, messageData);
+                        break;
                     default:
                         log.warn("⚠️ 알 수 없는 메시지 타입: {}", messageType);
                         // 기존 로직 (하위 호환성)
@@ -181,7 +192,116 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 위치 업데이트 처리 - 개선된 버전
+     * 수동 좌석 수 업데이트 (기사가 직접 조정)
+     */
+    private void handleManualSeatUpdate(WebSocketSession session, Map<String, Object> messageData) {
+        log.info("🔧 ========== 수동 좌석 업데이트 처리 ==========");
+
+        try {
+            String busNumber = sessionToBusMap.get(session.getId());
+            String organizationId = sessionToOrganizationMap.get(session.getId());
+
+            if (busNumber == null || organizationId == null) {
+                sendErrorMessage(session, "버스 정보를 찾을 수 없습니다.");
+                return;
+            }
+
+            // 업데이트 타입 확인 (increment/decrement/set)
+            String updateType = (String) messageData.get("updateType");
+            Integer value = getIntegerValue(messageData.get("value"));
+
+            if (updateType == null) {
+                sendErrorMessage(session, "업데이트 타입이 필요합니다 (increment/decrement/set)");
+                return;
+            }
+
+            // 버스 정보 조회
+            Bus bus = busService.getBusByNumberAndOrganization(busNumber, organizationId);
+            int previousOccupied = bus.getOccupiedSeats();
+            boolean updateSuccess = false;
+            String updateMessage = "";
+
+            switch (updateType) {
+                case "increment":
+                    // 승객 추가
+                    int incrementCount = (value != null && value > 0) ? value : 1;
+                    if (bus.getOccupiedSeats() + incrementCount <= bus.getTotalSeats()) {
+                        bus.setOccupiedSeats(bus.getOccupiedSeats() + incrementCount);
+                        bus.setAvailableSeats(bus.getTotalSeats() - bus.getOccupiedSeats());
+                        updateSuccess = true;
+                        updateMessage = String.format("%d명 탑승 처리", incrementCount);
+                    } else {
+                        updateMessage = "좌석이 부족합니다";
+                    }
+                    break;
+
+                case "decrement":
+                    // 승객 감소
+                    int decrementCount = (value != null && value > 0) ? value : 1;
+                    if (bus.getOccupiedSeats() - decrementCount >= 0) {
+                        bus.setOccupiedSeats(bus.getOccupiedSeats() - decrementCount);
+                        bus.setAvailableSeats(bus.getTotalSeats() - bus.getOccupiedSeats());
+                        updateSuccess = true;
+                        updateMessage = String.format("%d명 하차 처리", decrementCount);
+                    } else {
+                        updateMessage = "하차할 승객이 없습니다";
+                    }
+                    break;
+
+                case "set":
+                    // 직접 설정
+                    if (value != null && value >= 0 && value <= bus.getTotalSeats()) {
+                        bus.setOccupiedSeats(value);
+                        bus.setAvailableSeats(bus.getTotalSeats() - value);
+                        updateSuccess = true;
+                        updateMessage = String.format("승객 수를 %d명으로 설정", value);
+                    } else {
+                        updateMessage = String.format("유효하지 않은 값입니다 (0~%d)", bus.getTotalSeats());
+                    }
+                    break;
+
+                default:
+                    updateMessage = "알 수 없는 업데이트 타입";
+            }
+
+            if (updateSuccess) {
+                // 위치 업데이트와 함께 좌석 정보도 업데이트
+                BusRealTimeLocationDTO locationUpdate = lastKnownLocations.get(busNumber);
+                if (locationUpdate != null) {
+                    locationUpdate.setOccupiedSeats(bus.getOccupiedSeats());
+                    busService.updateBusLocation(locationUpdate);
+                }
+
+                // 브로드캐스트
+                busService.broadcastBusStatusUpdate(bus);
+            }
+
+            // 응답 메시지
+            Map<String, Object> response = Map.of(
+                    "type", "manual_seat_update_response",
+                    "status", updateSuccess ? "success" : "failure",
+                    "message", updateMessage,
+                    "busNumber", busNumber,
+                    "previousOccupiedSeats", previousOccupied,
+                    "currentOccupiedSeats", bus.getOccupiedSeats(),
+                    "availableSeats", bus.getAvailableSeats(),
+                    "totalSeats", bus.getTotalSeats(),
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("🔧 수동 좌석 업데이트 {} - {}",
+                    updateSuccess ? "성공" : "실패", updateMessage);
+
+        } catch (Exception e) {
+            log.error("❌ 수동 좌석 업데이트 중 오류", e);
+            sendErrorMessage(session, "수동 좌석 업데이트 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 위치 업데이트와 함께 좌석 정보도 처리하는 개선된 메서드
      */
     private void handleLocationUpdate(WebSocketSession session, Map<String, Object> messageData) {
         try {
@@ -220,13 +340,12 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             if (latitude == 0.0 && longitude == 0.0) {
                 log.warn("⚠️ (0, 0) 위치 수신됨 - 무시합니다. 버스: {}", busNumber);
                 sendErrorMessage(session, "유효한 GPS 위치를 기다리는 중입니다.");
-                return; // 처리하지 않고 종료
+                return;
             }
 
             // 한국 좌표 범위 확인 (선택적 검증)
             if (latitude < 33.0 || latitude > 39.0 || longitude < 124.0 || longitude > 132.0) {
                 log.warn("⚠️ 한국 범위 밖의 좌표 수신: ({}, {}), 버스: {}", latitude, longitude, busNumber);
-                // 경고만 하고 처리는 계속 (해외 테스트 등을 고려)
             }
 
             // DTO 생성
@@ -249,38 +368,196 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                 log.info("🆕 ========================================");
             }
 
-            // 실시간 위치 정보 저장 (승객 탑승 감지용)
+            // 실시간 위치 정보 저장
             lastKnownLocations.put(busNumber, locationUpdate);
             lastLocationUpdateTime.put(busNumber, Instant.now());
-
-            // 위치 변화 감지 및 로깅
-            BusRealTimeLocationDTO previousLocation = lastKnownLocations.get(busNumber);
-            if (previousLocation != null) {
-                double distance = calculateDistance(
-                        previousLocation.getLatitude(), previousLocation.getLongitude(),
-                        latitude, longitude
-                );
-
-                if (distance > 5) { // 5미터 이상 이동시
-                    log.info("🚍 버스 {} 이동 감지: {}m 이동", busNumber, Math.round(distance));
-                }
-            }
 
             // BusService로 위치 업데이트 전달
             busService.updateBusLocation(locationUpdate);
 
             totalLocationUpdates++;
 
-            log.info("✅ 위치 업데이트 #{} 완료", totalLocationUpdates);
-            log.info("📍 누적 위치 업데이트: {}", totalLocationUpdates);
-            log.info("📍 ==========================================");
+            // 현재 좌석 정보 조회 및 응답
+            BusSeatDTO currentSeatInfo = busService.getBusSeatsByBusNumber(busNumber, organizationId);
 
-            // 성공 응답
-            sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
+            // 좌석 점유율 계산
+            double occupancyRate = currentSeatInfo.getTotalSeats() > 0 ?
+                    (double) currentSeatInfo.getOccupiedSeats() / currentSeatInfo.getTotalSeats() * 100 : 0;
+
+            // 상태 메시지 생성
+            String seatStatusMessage;
+            String seatStatusLevel;
+            if (currentSeatInfo.getAvailableSeats() == 0) {
+                seatStatusMessage = "만석";
+                seatStatusLevel = "critical";
+            } else if (currentSeatInfo.getAvailableSeats() <= 5) {
+                seatStatusMessage = String.format("잔여 %d석", currentSeatInfo.getAvailableSeats());
+                seatStatusLevel = "warning";
+            } else {
+                seatStatusMessage = String.format("여유 %d석", currentSeatInfo.getAvailableSeats());
+                seatStatusLevel = "normal";
+            }
+
+            // 성공 응답 (좌석 정보 포함)
+            Map<String, Object> response = Map.of(
+                    "type", "location_update_response",
+                    "status", "success",
+                    "message", "위치 업데이트가 성공적으로 처리되었습니다.",
+                    "busNumber", busNumber,
+                    "location", Map.of(
+                            "latitude", latitude,
+                            "longitude", longitude,
+                            "timestamp", locationUpdate.getTimestamp()
+                    ),
+                    "seatInfo", Map.of(
+                            "totalSeats", currentSeatInfo.getTotalSeats(),
+                            "occupiedSeats", currentSeatInfo.getOccupiedSeats(),
+                            "availableSeats", currentSeatInfo.getAvailableSeats(),
+                            "occupancyRate", String.format("%.1f%%", occupancyRate),
+                            "statusMessage", seatStatusMessage,
+                            "statusLevel", seatStatusLevel
+                    ),
+                    "updateCount", totalLocationUpdates,
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("✅ 위치 업데이트 #{} 완료 - 좌석: {}/{} (점유율: {:.1f}%)",
+                    totalLocationUpdates, currentSeatInfo.getOccupiedSeats(),
+                    currentSeatInfo.getTotalSeats(), occupancyRate);
+
+            log.info("📍 ==========================================");
 
         } catch (Exception e) {
             log.error("❌ 위치 업데이트 처리 실패: {}", e.getMessage());
             sendErrorMessage(session, "위치 업데이트 처리 실패: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 좌석 정보 요청 처리 (버스 기사용)
+     */
+    private void handleGetSeatInfo(WebSocketSession session, Map<String, Object> messageData) {
+        log.info("💺 ========== 좌석 정보 요청 처리 ==========");
+
+        try {
+            String busNumber = sessionToBusMap.get(session.getId());
+            String organizationId = sessionToOrganizationMap.get(session.getId());
+
+            if (busNumber == null || organizationId == null) {
+                log.error("❌ 세션이 버스와 매핑되지 않음: 세션 ID = {}", session.getId());
+                sendErrorMessage(session, "버스 정보를 찾을 수 없습니다. 위치 업데이트를 먼저 전송해주세요.");
+                return;
+            }
+
+            // 좌석 정보 조회
+            BusSeatDTO seatInfo = busService.getBusSeatsByBusNumber(busNumber, organizationId);
+
+            // 좌석 점유율 계산
+            double occupancyRate = seatInfo.getTotalSeats() > 0 ?
+                    (double) seatInfo.getOccupiedSeats() / seatInfo.getTotalSeats() * 100 : 0;
+
+            // 상태별 색상 및 메시지
+            String statusColor;
+            String statusMessage;
+            if (seatInfo.getAvailableSeats() == 0) {
+                statusColor = "red";
+                statusMessage = "만석입니다";
+            } else if (seatInfo.getAvailableSeats() <= 5) {
+                statusColor = "orange";
+                statusMessage = String.format("잔여 좌석 %d석", seatInfo.getAvailableSeats());
+            } else if (occupancyRate >= 70) {
+                statusColor = "yellow";
+                statusMessage = String.format("좌석 %d/%d", seatInfo.getOccupiedSeats(), seatInfo.getTotalSeats());
+            } else {
+                statusColor = "green";
+                statusMessage = String.format("여유 좌석 %d석", seatInfo.getAvailableSeats());
+            }
+
+            // 응답 메시지
+            Map<String, Object> response = Map.of(
+                    "type", "seat_info_response",
+                    "busNumber", seatInfo.getBusNumber(),
+                    "busRealNumber", seatInfo.getBusRealNumber() != null ? seatInfo.getBusRealNumber() : "",
+                    "seatInfo", Map.of(
+                            "totalSeats", seatInfo.getTotalSeats(),
+                            "occupiedSeats", seatInfo.getOccupiedSeats(),
+                            "availableSeats", seatInfo.getAvailableSeats(),
+                            "occupancyRate", String.format("%.1f%%", occupancyRate),
+                            "occupancyRateValue", occupancyRate,
+                            "statusColor", statusColor,
+                            "statusMessage", statusMessage,
+                            "isOperating", seatInfo.isOperate()
+                    ),
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("💺 좌석 정보 전송 완료 - 버스: {}, 좌석: {}/{} ({:.1f}%)",
+                    busNumber, seatInfo.getOccupiedSeats(),
+                    seatInfo.getTotalSeats(), occupancyRate);
+
+            log.info("💺 ======================================");
+
+        } catch (Exception e) {
+            log.error("❌ 좌석 정보 조회 중 오류", e);
+            sendErrorMessage(session, "좌석 정보 조회 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 좌석 수 리셋 요청 처리 (운행 시작/종료 시)
+     */
+    private void handleResetSeats(WebSocketSession session, Map<String, Object> messageData) {
+        log.info("🔄 ========== 좌석 리셋 요청 처리 ==========");
+
+        try {
+            String busNumber = sessionToBusMap.get(session.getId());
+            String organizationId = sessionToOrganizationMap.get(session.getId());
+
+            if (busNumber == null || organizationId == null) {
+                sendErrorMessage(session, "버스 정보를 찾을 수 없습니다.");
+                return;
+            }
+
+            // 좌석 리셋 처리
+            Bus bus = busService.getBusByNumberAndOrganization(busNumber, organizationId);
+            int previousOccupied = bus.getOccupiedSeats();
+
+            bus.setOccupiedSeats(0);
+            bus.setAvailableSeats(bus.getTotalSeats());
+
+            // DB 저장은 BusService의 flushLocationUpdates에서 처리되도록
+            // 또는 직접 저장
+            busService.updateBusLocation(new BusRealTimeLocationDTO(
+                    busNumber, organizationId,
+                    bus.getLocation().getY(), bus.getLocation().getX(),
+                    0, System.currentTimeMillis()
+            ));
+
+            // 응답 메시지
+            Map<String, Object> response = Map.of(
+                    "type", "reset_seats_response",
+                    "status", "success",
+                    "message", String.format("좌석이 초기화되었습니다. (이전 승객: %d명)", previousOccupied),
+                    "busNumber", busNumber,
+                    "seatInfo", Map.of(
+                            "totalSeats", bus.getTotalSeats(),
+                            "occupiedSeats", 0,
+                            "availableSeats", bus.getTotalSeats()
+                    ),
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("🔄 좌석 리셋 완료 - 버스: {}, 이전 승객: {}명", busNumber, previousOccupied);
+
+        } catch (Exception e) {
+            log.error("❌ 좌석 리셋 중 오류", e);
+            sendErrorMessage(session, "좌석 리셋 중 오류가 발생했습니다: " + e.getMessage());
         }
     }
 
