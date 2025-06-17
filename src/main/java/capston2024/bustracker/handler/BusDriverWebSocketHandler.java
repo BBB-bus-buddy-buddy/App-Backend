@@ -174,10 +174,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    /**
-     * 위치 업데이트 처리 - BusService.updateBusLocation() 호출
-     * 이 메서드가 핵심입니다. WebSocket으로 받은 위치를 BusService로 전달합니다.
-     */
+    // handleLocationUpdate 메서드 수정
     private void handleLocationUpdate(WebSocketSession session, Map<String, Object> messageData) {
         try {
             log.info("📍 ========== 위치 업데이트 처리 시작 ==========");
@@ -209,6 +206,19 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
                 log.error("❌ 유효하지 않은 GPS 좌표: ({}, {})", latitude, longitude);
                 throw new IllegalArgumentException("유효하지 않은 GPS 좌표입니다");
+            }
+
+            // (0, 0) 위치 필터링 추가
+            if (latitude == 0.0 && longitude == 0.0) {
+                log.warn("⚠️ (0, 0) 위치 수신됨 - 무시합니다. 버스: {}", busNumber);
+                sendErrorMessage(session, "유효한 GPS 위치를 기다리는 중입니다.");
+                return; // 처리하지 않고 종료
+            }
+
+            // 한국 좌표 범위 확인 (선택적 검증)
+            if (latitude < 33.0 || latitude > 39.0 || longitude < 124.0 || longitude > 132.0) {
+                log.warn("⚠️ 한국 범위 밖의 좌표 수신: ({}, {}), 버스: {}", latitude, longitude, busNumber);
+                // 경고만 하고 처리는 계속 (해외 테스트 등을 고려)
             }
 
             // DTO 생성
@@ -249,9 +259,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    /**
-     * 레거시 위치 업데이트 처리 (하위 호환성)
-     */
+    // handleLegacyLocationUpdate 메서드도 동일하게 수정
     private void handleLegacyLocationUpdate(WebSocketSession session, String payload) throws Exception {
         log.info("🔄 ========== 레거시 위치 업데이트 처리 ==========");
 
@@ -265,6 +273,13 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             log.info("🔄 조직 ID: {}", organizationId);
             log.info("🔄 위치: ({}, {})", locationUpdate.getLatitude(), locationUpdate.getLongitude());
             log.info("🔄 승객 수: {}", locationUpdate.getOccupiedSeats());
+
+            // (0, 0) 위치 필터링 추가
+            if (locationUpdate.getLatitude() == 0.0 && locationUpdate.getLongitude() == 0.0) {
+                log.warn("⚠️ 레거시 메시지에서 (0, 0) 위치 수신됨 - 무시합니다. 버스: {}", busNumber);
+                sendErrorMessage(session, "유효한 GPS 위치를 기다리는 중입니다.");
+                return; // 처리하지 않고 종료
+            }
 
             // 세션 맵핑 등록 (처음 메시지를 보낼 때)
             if (!sessionToBusMap.containsKey(session.getId())) {
