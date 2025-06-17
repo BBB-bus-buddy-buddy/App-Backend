@@ -53,7 +53,8 @@ public class BusService {
     /**
      * 버스 상태 업데이트 이벤트
      */
-    public record BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) { }
+    public record BusStatusUpdateEvent(String organizationId, BusRealTimeStatusDTO busStatus) {
+    }
 
     /**
      * 버스 등록
@@ -266,7 +267,7 @@ public class BusService {
      * 버스의 모든 정류장 상세 정보를 한 번에 조회합니다.
      * 각 정류장의 상태(지나친 정류장, 현재 정류장)와 도착 예정 시간을 포함합니다.
      *
-     * @param busNumber 버스 번호
+     * @param busNumber      버스 번호
      * @param organizationId 조직 ID
      * @return 상세 정보가 포함된 정류장 목록
      */
@@ -564,15 +565,33 @@ public class BusService {
             pendingLocationUpdates.clear();
         }
 
-        log.info("[BusService] 위치 업데이트 처리 시작 - {} 건", updates.size());
+        log.info("🔄 [BusService] 위치 업데이트 처리 시작 - {} 건", updates.size());
 
         int successCount = 0;
         int failCount = 0;
+        int skipCount = 0;
         long startTime = System.currentTimeMillis();
 
         // 2. 각 버스의 위치 업데이트 처리
         for (BusRealTimeLocationDTO update : updates) {
             try {
+                // 위치 유효성 검증
+                if (update.getLatitude() == 0.0 && update.getLongitude() == 0.0) {
+                    log.warn("🚫 [BusService] (0, 0) 위치 업데이트 건너뛰기: 버스 번호 = {}",
+                            update.getBusNumber());
+                    skipCount++;
+                    continue;
+                }
+
+                // GPS 좌표 범위 검증
+                if (update.getLatitude() < -90 || update.getLatitude() > 90 ||
+                        update.getLongitude() < -180 || update.getLongitude() > 180) {
+                    log.warn("🚫 [BusService] 잘못된 GPS 좌표 건너뛰기: 버스 = {}, 위치 = ({}, {})",
+                            update.getBusNumber(), update.getLatitude(), update.getLongitude());
+                    skipCount++;
+                    continue;
+                }
+
                 // 버스 조회
                 Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber())
                         .and("organizationId").is(update.getOrganizationId()));
@@ -580,7 +599,7 @@ public class BusService {
                 Bus existingBus = mongoOperations.findOne(query, Bus.class);
 
                 if (existingBus == null) {
-                    log.warn("위치 업데이트 실패: 버스를 찾을 수 없음: {}, 조직: {}",
+                    log.warn("🚌 [BusService] 버스를 찾을 수 없음: {}, 조직: {}",
                             update.getBusNumber(), update.getOrganizationId());
                     failCount++;
                     continue;
@@ -588,14 +607,29 @@ public class BusService {
 
                 // 운행 중지된 버스인 경우 위치 업데이트 건너뛰기
                 if (!existingBus.isOperate()) {
-                    log.debug("운행 중지된 버스 위치 업데이트 건너뛰기: {}", update.getBusNumber());
-                    failCount++;
+                    log.debug("🛑 [BusService] 운행 중지된 버스 위치 업데이트 건너뛰기: {}",
+                            update.getBusNumber());
+                    skipCount++;
                     continue;
+                }
+
+                // 이전 위치와 동일한지 확인 (선택적)
+                GeoJsonPoint currentLocation = existingBus.getLocation();
+                if (currentLocation != null &&
+                        Math.abs(currentLocation.getX() - update.getLongitude()) < 0.000001 &&
+                        Math.abs(currentLocation.getY() - update.getLatitude()) < 0.000001) {
+                    log.debug("📍 [BusService] 위치 변화 없음 - 업데이트 건너뛰기: 버스 = {}",
+                            update.getBusNumber());
+                    // 좌석 정보만 변경되었을 수 있으므로 계속 처리
                 }
 
                 // 위치 및 좌석 정보 업데이트
                 GeoJsonPoint newLocation = new GeoJsonPoint(update.getLongitude(), update.getLatitude());
                 Instant timestamp = Instant.ofEpochMilli(update.getTimestamp());
+
+                log.info("🚌 [BusService] 버스 {} 위치 업데이트 시작 - 위치: ({}, {}), 승객: {}명",
+                        update.getBusNumber(), update.getLatitude(), update.getLongitude(),
+                        update.getOccupiedSeats());
 
                 // 현재 위치와 가장 가까운 정류장 찾기
                 Route.RouteStation nearestStation = findNearestStation(existingBus, newLocation);
@@ -615,7 +649,7 @@ public class BusService {
                             .set("lastStationTime", timestamp)
                             .set("prevStationIdx", nearestStation.getSequence());
 
-                    log.info("버스 {} 정류장 업데이트: 시퀀스={}, 정류장ID={}",
+                    log.info("🚏 [BusService] 버스 {} 정류장 업데이트: 시퀀스={}, 정류장ID={}",
                             update.getBusNumber(), nearestStation.getSequence(),
                             nearestStation.getStationId().getId());
                 }
@@ -623,6 +657,10 @@ public class BusService {
                 // MongoDB 업데이트 실행
                 mongoOperations.updateFirst(query, mongoUpdate, Bus.class);
                 successCount++;
+
+                log.info("✅ [BusService] 버스 {} 업데이트 완료 - 새 위치: Point [x={}, y={}], 승객: {}명",
+                        update.getBusNumber(), newLocation.getX(), newLocation.getY(),
+                        update.getOccupiedSeats());
 
                 // 3. 업데이트된 버스 정보 조회 및 이벤트 발생
                 Bus updatedBus = mongoOperations.findOne(query, Bus.class);
@@ -637,19 +675,20 @@ public class BusService {
                 }
 
             } catch (Exception e) {
-                log.error("버스 {} 위치 업데이트 중 오류 발생", update.getBusNumber(), e);
+                log.error("❌ [BusService] 버스 {} 위치 업데이트 중 오류 발생",
+                        update.getBusNumber(), e);
                 failCount++;
             }
         }
 
         long elapsedTime = System.currentTimeMillis() - startTime;
 
-        log.info("[BusService] 위치 업데이트 처리 완료 - 성공: {} 건, 실패: {} 건, 소요 시간: {} ms",
-                successCount, failCount, elapsedTime);
+        log.info("✅ [BusService] 위치 업데이트 처리 완료 - 성공: {} 건, 실패: {} 건, 건너뛴: {} 건, 소요 시간: {} ms",
+                successCount, failCount, skipCount, elapsedTime);
 
         // 4. 성능 모니터링
         if (elapsedTime > 5000) { // 5초 이상 걸린 경우 경고
-            log.warn("[BusService] 위치 업데이트 처리 시간이 길어졌습니다: {} ms", elapsedTime);
+            log.warn("⚠️ [BusService] 위치 업데이트 처리 시간이 길어졌습니다: {} ms", elapsedTime);
         }
     }
 
@@ -696,7 +735,8 @@ public class BusService {
             String busNumber,
             String stationName,
             Map<String, Object> eventData
-    ) {}
+    ) {
+    }
 
     /**
      * 현재 위치에서 가장 가까운 정류장 찾기 (개선된 버전)
@@ -831,11 +871,11 @@ public class BusService {
         double dLon = lon2Rad - lon1Rad;
 
         // Haversine 공식
-        double a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                 Math.cos(lat1Rad) * Math.cos(lat2Rad) *
-                        Math.sin(dLon/2) * Math.sin(dLon/2);
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
         // 최종 거리 (미터 단위)
         return R * c;

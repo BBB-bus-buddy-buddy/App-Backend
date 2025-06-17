@@ -1,3 +1,4 @@
+// src/main/java/capston2024/bustracker/service/DriveService.java
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
@@ -44,8 +45,6 @@ public class DriveService {
 
     // 출발지 도착 허용 반경 (미터)
     private static final double ARRIVAL_THRESHOLD_METERS = 50.0;
-    // 조기 출발 허용 시간 (분)
-    private static final int EARLY_START_ALLOWED_MINUTES = 10;
 
     /**
      * 운행 시작 - BusOperation과 Bus 상태를 통합 관리
@@ -104,22 +103,16 @@ public class DriveService {
                 throw new BusinessException("이미 운행 중인 버스입니다: " + bus.getBusNumber());
             }
 
-            // 8. 출발 시간 검증
+            // 8. 조기 출발 여부 확인 (시간 제한 없음)
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduledStart = operation.getScheduledStart();
+            LocalDateTime scheduledStart = operation.getScheduledStart().minusHours(9);  // 시간 조정
+            boolean isEarlyStart = now.isBefore(scheduledStart);
 
-            if (requestDTO.isEarlyStart()) {
-                // 조기 출발인 경우 허용 시간 확인
-                LocalDateTime earliestAllowed = scheduledStart.minusMinutes(EARLY_START_ALLOWED_MINUTES);
-                if (now.isBefore(earliestAllowed)) {
-                    throw new BusinessException(String.format("조기 출발은 예정 시간 %d분 전부터만 가능합니다.", EARLY_START_ALLOWED_MINUTES));
-                }
-            } else {
-                // 정상 출발인 경우 정각 이후인지 확인
-                if (now.isBefore(scheduledStart)) {
-                    throw new BusinessException("아직 출발 시간이 되지 않았습니다. 예정 시간: " + scheduledStart);
-                }
-            }
+            log.info("=== 운행 시작 시간 정보 ===");
+            log.info("DB에서 읽은 시간: {}", operation.getScheduledStart());
+            log.info("조정된 예정 시간: {}", scheduledStart);
+            log.info("현재 시간: {}", now);
+            log.info("조기 출발 여부: {}", isEarlyStart);
 
             // 9. 출발지 도착 확인 (null 체크 추가)
             if (requestDTO.getCurrentLocation() != null) {
@@ -143,7 +136,11 @@ public class DriveService {
             busOperationRepository.save(operation);
 
             // 12. 응답 DTO 생성
-            return buildDriveStatusDTO(operation, bus, driver, requestDTO.isEarlyStart(), "운행이 시작되었습니다.");
+            String startMessage = isEarlyStart ?
+                    "조기 출발로 운행이 시작되었습니다." :
+                    "운행이 시작되었습니다.";
+
+            return buildDriveStatusDTO(operation, bus, driver, isEarlyStart, startMessage);
 
         } catch (Exception e) {
             log.error("운행 시작 중 오류 발생: {}", e.getMessage(), e);
@@ -227,26 +224,6 @@ public class DriveService {
     }
 
     /**
-     * 운행 중 위치 업데이트
-     * @deprecated WebSocket을 통한 실시간 위치 업데이트로 대체됨
-     *
-     * 위치 업데이트는 이제 다음과 같이 처리됩니다:
-     * 1. 운전자 앱에서 WebSocket으로 위치 정보 전송
-     * 2. BusDriverWebSocketHandler가 메시지 수신
-     * 3. BusService.updateBusLocation()으로 pendingLocationUpdates에 저장
-     * 4. BusService.flushLocationUpdates()가 주기적으로(10초마다) DB에 반영
-     */
-    @Deprecated
-    public Map<String, Object> updateLocation(DriveLocationUpdateDTO requestDTO, String driverEmail, String organizationId) {
-        log.warn("Deprecated 메서드 호출 - updateLocation은 더 이상 사용되지 않습니다. WebSocket을 사용하세요.");
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("updated", false);
-        response.put("warning", "이 메서드는 더 이상 사용되지 않습니다. WebSocket을 통한 실시간 위치 업데이트를 사용하세요.");
-        return response;
-    }
-
-    /**
      * 다음 운행 정보 조회
      */
     public DriveStatusDTO getNextDrive(String currentOperationId, String busNumber, String driverEmail, String organizationId) {
@@ -267,12 +244,16 @@ public class DriveService {
             List<BusOperation> todayOperations = busOperationRepository
                     .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                     .stream()
-                    .filter(op -> op.getScheduledStart().isAfter(now) &&
-                            op.getScheduledStart().isBefore(endOfDay) &&
-                            DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
-                            op.getBusId() != null &&
-                            op.getBusId().getId() != null &&
-                            op.getBusId().getId().toString().equals(bus.getId()))
+                    .filter(op -> {
+                        // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+                        LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
+                        return adjustedStart.isAfter(now) &&
+                                adjustedStart.isBefore(endOfDay) &&
+                                DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
+                                op.getBusId() != null &&
+                                op.getBusId().getId() != null &&
+                                op.getBusId().getId().toString().equals(bus.getId());
+                    })
                     .sorted((a, b) -> a.getScheduledStart().compareTo(b.getScheduledStart()))
                     .toList();
 
@@ -353,7 +334,7 @@ public class DriveService {
     }
 
     /**
-     * 운행 시작 가능 여부 확인 - 프론트엔드의 canStartDrive 헬퍼 함수와 호환
+     * 운행 시작 가능 여부 확인 - 항상 true 반환 (제한 없음)
      */
     public Map<String, Object> canStartDrive(String operationId, String driverEmail, String organizationId,
                                              boolean allowEarlyStart, int earlyStartMinutes) {
@@ -366,30 +347,21 @@ public class DriveService {
                             .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + operationId)));
 
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduledStart = operation.getScheduledStart();
+            // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+            LocalDateTime scheduledStart = operation.getScheduledStart().minusHours(9);
 
             Map<String, Object> result = new HashMap<>();
 
-            if (allowEarlyStart) {
-                LocalDateTime earliestStart = scheduledStart.minusMinutes(earlyStartMinutes);
+            // 항상 운행 시작 가능
+            result.put("canStart", true);
 
-                if (now.isBefore(earliestStart)) {
-                    long minutesUntilEarly = java.time.Duration.between(now, earliestStart).toMinutes();
-                    result.put("canStart", false);
-                    result.put("message", String.format("조기 출발은 %d분 후부터 가능합니다.", minutesUntilEarly));
-                } else {
-                    result.put("canStart", true);
-                    result.put("message", "조기 출발이 가능합니다.");
-                }
+            if (now.isBefore(scheduledStart)) {
+                long minutesUntilStart = java.time.Duration.between(now, scheduledStart).toMinutes();
+                result.put("message", String.format("예정 시간까지 %d분 남았습니다. 조기 출발이 가능합니다.", minutesUntilStart));
+                result.put("isEarlyStart", true);
             } else {
-                if (now.isBefore(scheduledStart)) {
-                    long minutesUntilStart = java.time.Duration.between(now, scheduledStart).toMinutes();
-                    result.put("canStart", false);
-                    result.put("message", String.format("출발 시간까지 %d분 남았습니다.", minutesUntilStart));
-                } else {
-                    result.put("canStart", true);
-                    result.put("message", "운행을 시작할 수 있습니다.");
-                }
+                result.put("message", "운행을 시작할 수 있습니다.");
+                result.put("isEarlyStart", false);
             }
 
             return result;
@@ -466,6 +438,10 @@ public class DriveService {
      */
     private DriveStatusDTO buildDriveStatusDTO(BusOperation operation, Bus bus, User driver, boolean isEarlyStart, String message) {
         try {
+            // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+            LocalDateTime adjustedScheduledStart = operation.getScheduledStart().minusHours(9);
+            LocalDateTime adjustedScheduledEnd = operation.getScheduledEnd().minusHours(9);
+
             DriveStatusDTO.DriveStatusDTOBuilder builder = DriveStatusDTO.builder()
                     .operationId(operation.getId())
                     .status(operation.getStatus())
@@ -475,8 +451,8 @@ public class DriveService {
                     .busIsOperate(bus.isOperate())
                     .driverId(driver.getId())
                     .driverName(driver.getName())
-                    .scheduledStart(operation.getScheduledStart())
-                    .scheduledEnd(operation.getScheduledEnd())
+                    .scheduledStart(adjustedScheduledStart)  // 조정된 시간 사용
+                    .scheduledEnd(adjustedScheduledEnd)      // 조정된 시간 사용
                     .isEarlyStart(isEarlyStart)
                     .message(message)
                     .hasNextDrive(false);

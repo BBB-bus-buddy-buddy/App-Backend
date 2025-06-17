@@ -57,7 +57,12 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String clientIp = (String) session.getAttributes().get("CLIENT_IP");
-        log.info("버스 기사 WebSocket 연결 설정: 세션 ID = {}, IP = {}", session.getId(), clientIp);
+
+        log.info("🚌 ================== WebSocket 연결 설정 ==================");
+        log.info("🚌 세션 ID: {}", session.getId());
+        log.info("🚌 클라이언트 IP: {}", clientIp);
+        log.info("🚌 현재 활성 버스 기사 수: {}", driverSessions.size());
+        log.info("🚌 ========================================================");
 
         // 하트비트 초기화
         lastHeartbeatMap.put(session.getId(), Instant.now());
@@ -70,8 +75,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     "message", "웹소켓 연결이 성공적으로 설정되었습니다.",
                     "timestamp", System.currentTimeMillis()
             ));
+            log.info("✅ 연결 확인 메시지 전송 완료");
         } catch (Exception e) {
-            log.error("연결 확인 메시지 전송 실패: {}", e.getMessage());
+            log.error("❌ 연결 확인 메시지 전송 실패: {}", e.getMessage());
         }
     }
 
@@ -82,13 +88,17 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         String organizationId = sessionToOrganizationMap.remove(sessionId);
         String clientIp = (String) session.getAttributes().get("CLIENT_IP");
 
+        log.warn("🚌 ================== WebSocket 연결 종료 ==================");
+        log.warn("🚌 세션 ID: {}", sessionId);
+        log.warn("🚌 버스 번호: {}", busNumber != null ? busNumber : "미등록");
+        log.warn("🚌 조직 ID: {}", organizationId != null ? organizationId : "미등록");
+        log.warn("🚌 종료 상태: {} - {}", status.getCode(), status.getReason());
+        log.warn("🚌 남은 활성 버스: {}", driverSessions.size() - (busNumber != null ? 1 : 0));
+        log.warn("🚌 ========================================================");
+
         // 모든 맵에서 세션 정보 제거 (메모리 누수 방지)
         if (busNumber != null) {
             driverSessions.remove(busNumber);
-            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 버스 번호 = {}, 조직 = {}, 상태 = {}",
-                    sessionId, busNumber, organizationId, status.getCode());
-        } else {
-            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 상태 = {}", sessionId, status.getCode());
         }
 
         // 하트비트 정보 제거
@@ -103,8 +113,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         if (busNumber != null) {
             try {
                 busService.updateBusInactiveStatus(busNumber);
+                log.info("🔴 버스 {} 비활성 상태로 변경됨", busNumber);
             } catch (Exception e) {
-                log.error("버스 비활성 상태 업데이트 실패: {}", e.getMessage());
+                log.error("❌ 버스 비활성 상태 업데이트 실패: {}", e.getMessage());
             }
         }
     }
@@ -114,46 +125,60 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         String payload = message.getPayload();
         totalMessagesReceived++;
 
-        log.debug("버스 기사로부터 메시지 수신: 세션 ID = {}, 메시지 길이 = {}, 총 수신 메시지 = {}",
-                session.getId(), payload.length(), totalMessagesReceived);
+        log.info("📨 ============= WebSocket 메시지 수신 #{} =============", totalMessagesReceived);
+        log.info("📨 세션 ID: {}", session.getId());
+        log.info("📨 메시지 크기: {} bytes", payload.length());
+        log.info("📨 메시지 내용: {}", payload.length() > 200 ? payload.substring(0, 200) + "..." : payload);
 
         try {
             // 메시지 타입 판별
             Map<String, Object> messageData = objectMapper.readValue(payload, Map.class);
             String messageType = (String) messageData.get("type");
 
+            log.info("📨 메시지 타입: {}", messageType != null ? messageType : "LEGACY");
+            log.info("📨 =====================================================");
+
             // 하트비트 업데이트
             lastHeartbeatMap.put(session.getId(), Instant.now());
 
-            switch (messageType) {
-                case "location_update":
-                    handleLocationUpdate(session, messageData);
-                    break;
-                case "heartbeat":
-                    handleHeartbeat(session);
-                    break;
-                case "bus_status_update":
-                    handleBusStatusUpdate(session, messageData);
-                    break;
-                default:
-                    // 기존 로직 (하위 호환성)
-                    handleLegacyLocationUpdate(session, payload);
+            if (messageType != null) {
+                switch (messageType) {
+                    case "location_update":
+                        handleLocationUpdate(session, messageData);
+                        break;
+                    case "heartbeat":
+                        handleHeartbeat(session);
+                        break;
+                    case "bus_status_update":
+                        handleBusStatusUpdate(session, messageData);
+                        break;
+                    default:
+                        log.warn("⚠️ 알 수 없는 메시지 타입: {}", messageType);
+                        // 기존 로직 (하위 호환성)
+                        handleLegacyLocationUpdate(session, payload);
+                }
+            } else {
+                // type 필드가 없는 경우 레거시 처리
+                log.info("📨 레거시 메시지 형식 감지");
+                handleLegacyLocationUpdate(session, payload);
             }
 
         } catch (Exception e) {
-            log.error("버스 위치 업데이트 처리 중 오류 발생: 세션 ID = {}, 오류 = {}",
-                    session.getId(), e.getMessage(), e);
+            log.error("❌ ============= 메시지 처리 오류 =============");
+            log.error("❌ 세션 ID: {}", session.getId());
+            log.error("❌ 오류: {}", e.getMessage());
+            log.error("❌ 스택 트레이스:", e);
+            log.error("❌ =========================================");
 
             sendErrorMessage(session, "메시지 처리 중 오류가 발생했습니다: " + e.getMessage());
         }
     }
 
-    /**
-     * 위치 업데이트 처리 - BusService.updateBusLocation() 호출
-     * 이 메서드가 핵심입니다. WebSocket으로 받은 위치를 BusService로 전달합니다.
-     */
+    // handleLocationUpdate 메서드 수정
     private void handleLocationUpdate(WebSocketSession session, Map<String, Object> messageData) {
         try {
+            log.info("📍 ========== 위치 업데이트 처리 시작 ==========");
+
             // 데이터 추출 및 검증
             String busNumber = (String) messageData.get("busNumber");
             String organizationId = (String) messageData.get("organizationId");
@@ -164,15 +189,36 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             Integer occupiedSeats = getIntegerValue(messageData.get("occupiedSeats"));
             Long timestamp = getLongValue(messageData.get("timestamp"));
 
+            log.info("📍 버스 번호: {}", busNumber);
+            log.info("📍 조직 ID: {}", organizationId);
+            log.info("📍 위치: ({}, {})", latitude, longitude);
+            log.info("📍 승객 수: {}", occupiedSeats);
+
             // 기본 검증
             if (busNumber == null || organizationId == null ||
                     latitude == null || longitude == null || occupiedSeats == null) {
+                log.error("❌ 필수 필드 누락! busNumber: {}, organizationId: {}, lat: {}, lng: {}, seats: {}",
+                        busNumber, organizationId, latitude, longitude, occupiedSeats);
                 throw new IllegalArgumentException("필수 필드가 누락되었습니다");
             }
 
             // 위치 유효성 검증
             if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+                log.error("❌ 유효하지 않은 GPS 좌표: ({}, {})", latitude, longitude);
                 throw new IllegalArgumentException("유효하지 않은 GPS 좌표입니다");
+            }
+
+            // (0, 0) 위치 필터링 추가
+            if (latitude == 0.0 && longitude == 0.0) {
+                log.warn("⚠️ (0, 0) 위치 수신됨 - 무시합니다. 버스: {}", busNumber);
+                sendErrorMessage(session, "유효한 GPS 위치를 기다리는 중입니다.");
+                return; // 처리하지 않고 종료
+            }
+
+            // 한국 좌표 범위 확인 (선택적 검증)
+            if (latitude < 33.0 || latitude > 39.0 || longitude < 124.0 || longitude > 132.0) {
+                log.warn("⚠️ 한국 범위 밖의 좌표 수신: ({}, {}), 버스: {}", latitude, longitude, busNumber);
+                // 경고만 하고 처리는 계속 (해외 테스트 등을 고려)
             }
 
             // DTO 생성
@@ -186,57 +232,83 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                 sessionToBusMap.put(session.getId(), busNumber);
                 sessionToOrganizationMap.put(session.getId(), organizationId);
                 driverSessions.put(busNumber, session);
-                log.info("버스 기사 세션 등록: 버스 번호 = {}, 조직 = {}, 세션 ID = {}",
-                        busNumber, organizationId, session.getId());
+
+                log.info("🆕 ========== 새로운 버스 기사 등록 ==========");
+                log.info("🆕 버스 번호: {}", busNumber);
+                log.info("🆕 조직 ID: {}", organizationId);
+                log.info("🆕 세션 ID: {}", session.getId());
+                log.info("🆕 현재 활성 버스 수: {}", driverSessions.size());
+                log.info("🆕 ========================================");
             }
 
             // BusService로 위치 업데이트 전달
-            // BusService.updateBusLocation()은 pendingLocationUpdates에 저장하고
-            // BusService.flushLocationUpdates()가 주기적으로 DB에 반영합니다
             busService.updateBusLocation(locationUpdate);
 
             totalLocationUpdates++;
 
-            log.debug("위치 업데이트 처리 완료: 버스 = {}, 위치 = ({}, {}), 승객 = {}, 총 업데이트 = {}",
-                    busNumber, latitude, longitude, occupiedSeats, totalLocationUpdates);
+            log.info("✅ 위치 업데이트 #{} 완료", totalLocationUpdates);
+            log.info("📍 누적 위치 업데이트: {}", totalLocationUpdates);
+            log.info("📍 ==========================================");
 
             // 성공 응답
             sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
 
         } catch (Exception e) {
-            log.error("위치 업데이트 처리 실패: {}", e.getMessage());
+            log.error("❌ 위치 업데이트 처리 실패: {}", e.getMessage());
             sendErrorMessage(session, "위치 업데이트 처리 실패: " + e.getMessage());
         }
     }
 
-    /**
-     * 레거시 위치 업데이트 처리 (하위 호환성)
-     */
+    // handleLegacyLocationUpdate 메서드도 동일하게 수정
     private void handleLegacyLocationUpdate(WebSocketSession session, String payload) throws Exception {
-        // 기존 로직 유지 (하위 호환성)
-        BusRealTimeLocationDTO locationUpdate = objectMapper.readValue(payload, BusRealTimeLocationDTO.class);
-        String busNumber = locationUpdate.getBusNumber();
-        String organizationId = locationUpdate.getOrganizationId();
+        log.info("🔄 ========== 레거시 위치 업데이트 처리 ==========");
 
-        // 세션 맵핑 등록 (처음 메시지를 보낼 때)
-        if (!sessionToBusMap.containsKey(session.getId())) {
-            sessionToBusMap.put(session.getId(), busNumber);
-            sessionToOrganizationMap.put(session.getId(), organizationId);
-            driverSessions.put(busNumber, session);
-            log.info("버스 기사 세션 등록 (레거시): 버스 번호 = {}, 조직 = {}, 세션 ID = {}",
-                    busNumber, organizationId, session.getId());
+        try {
+            // 기존 로직 유지 (하위 호환성)
+            BusRealTimeLocationDTO locationUpdate = objectMapper.readValue(payload, BusRealTimeLocationDTO.class);
+            String busNumber = locationUpdate.getBusNumber();
+            String organizationId = locationUpdate.getOrganizationId();
+
+            log.info("🔄 버스 번호: {}", busNumber);
+            log.info("🔄 조직 ID: {}", organizationId);
+            log.info("🔄 위치: ({}, {})", locationUpdate.getLatitude(), locationUpdate.getLongitude());
+            log.info("🔄 승객 수: {}", locationUpdate.getOccupiedSeats());
+
+            // (0, 0) 위치 필터링 추가
+            if (locationUpdate.getLatitude() == 0.0 && locationUpdate.getLongitude() == 0.0) {
+                log.warn("⚠️ 레거시 메시지에서 (0, 0) 위치 수신됨 - 무시합니다. 버스: {}", busNumber);
+                sendErrorMessage(session, "유효한 GPS 위치를 기다리는 중입니다.");
+                return; // 처리하지 않고 종료
+            }
+
+            // 세션 맵핑 등록 (처음 메시지를 보낼 때)
+            if (!sessionToBusMap.containsKey(session.getId())) {
+                sessionToBusMap.put(session.getId(), busNumber);
+                sessionToOrganizationMap.put(session.getId(), organizationId);
+                driverSessions.put(busNumber, session);
+
+                log.info("🆕 레거시 버스 기사 등록: 버스 {}, 조직 {}", busNumber, organizationId);
+            }
+
+            // BusService로 위치 업데이트 전달
+            busService.updateBusLocation(locationUpdate);
+
+            totalLocationUpdates++;
+
+            log.info("✅ 레거시 위치 업데이트 #{} 완료", totalLocationUpdates);
+            log.info("🔄 ============================================");
+
+            // 성공 응답
+            sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
+
+        } catch (Exception e) {
+            log.error("❌ 레거시 위치 업데이트 처리 실패: {}", e.getMessage());
+            throw e;
         }
-
-        // BusService로 위치 업데이트 전달
-        busService.updateBusLocation(locationUpdate);
-
-        totalLocationUpdates++;
-
-        // 성공 응답
-        sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
     }
 
     private void handleHeartbeat(WebSocketSession session) {
+        log.debug("💓 하트비트 수신 - 세션 ID: {}", session.getId());
         try {
             sendMessage(session, Map.of(
                     "type", "heartbeat_response",
@@ -244,26 +316,32 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     "timestamp", System.currentTimeMillis()
             ));
         } catch (Exception e) {
-            log.error("하트비트 응답 전송 실패: {}", e.getMessage());
+            log.error("❌ 하트비트 응답 전송 실패: {}", e.getMessage());
         }
     }
 
     private void handleBusStatusUpdate(WebSocketSession session, Map<String, Object> messageData) {
         // 향후 확장을 위한 메서드
-        log.debug("버스 상태 업데이트 수신: {}", messageData);
+        log.info("🔄 버스 상태 업데이트 수신: {}", messageData);
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         String busNumber = sessionToBusMap.get(session.getId());
-        log.error("버스 기사 WebSocket 통신 오류: 세션 ID = {}, 버스 번호 = {}, 오류 = {}",
-                session.getId(), busNumber, exception.getMessage(), exception);
+
+        log.error("❌ ========== WebSocket 통신 오류 ==========");
+        log.error("❌ 세션 ID: {}", session.getId());
+        log.error("❌ 버스 번호: {}", busNumber != null ? busNumber : "미등록");
+        log.error("❌ 오류 메시지: {}", exception.getMessage());
+        log.error("❌ 스택 트레이스:", exception);
+        log.error("❌ ======================================");
 
         // 오류 발생 시 세션 정리
         try {
             session.close();
+            log.info("🔴 오류로 인한 세션 종료");
         } catch (Exception e) {
-            log.error("세션 강제 종료 실패: {}", e.getMessage());
+            log.error("❌ 세션 강제 종료 실패: {}", e.getMessage());
         }
     }
 
@@ -275,14 +353,14 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         if (session != null && session.isOpen()) {
             try {
                 sendMessage(session, message);
+                log.debug("📤 버스 {}에게 메시지 전송 성공", busNumber);
             } catch (Exception e) {
-                log.error("버스 기사({})에게 메시지 전송 중 오류 발생: {}", busNumber, e.getMessage());
-
+                log.error("❌ 버스 {}에게 메시지 전송 실패: {}", busNumber, e.getMessage());
                 // 세션이 유효하지 않으면 정리
                 cleanupSession(session.getId(), busNumber);
             }
         } else {
-            log.warn("버스 기사({})의 세션이 유효하지 않습니다", busNumber);
+            log.warn("⚠️ 버스 {}의 세션이 유효하지 않습니다", busNumber);
             if (session != null) {
                 cleanupSession(session.getId(), busNumber);
             }
@@ -364,8 +442,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     "timestamp", System.currentTimeMillis()
             );
             sendMessage(session, response);
+            log.debug("✅ 성공 메시지 전송: {}", message);
         } catch (Exception e) {
-            log.error("성공 메시지 전송 중 오류 발생", e);
+            log.error("❌ 성공 메시지 전송 중 오류 발생", e);
         }
     }
 
@@ -377,8 +456,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     "timestamp", System.currentTimeMillis()
             );
             sendMessage(session, response);
+            log.warn("⚠️ 오류 메시지 전송: {}", errorMessage);
         } catch (Exception e) {
-            log.error("오류 메시지 전송 중 오류 발생", e);
+            log.error("❌ 오류 메시지 전송 중 오류 발생", e);
         }
     }
 
@@ -401,12 +481,15 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     private void checkHeartbeats() {
         Instant threshold = Instant.now().minusSeconds(300); // 5분 임계값
 
+        log.info("💓 ========== 하트비트 체크 시작 ==========");
+        log.info("💓 현재 활성 세션 수: {}", lastHeartbeatMap.size());
+
         lastHeartbeatMap.entrySet().removeIf(entry -> {
             String sessionId = entry.getKey();
             Instant lastHeartbeat = entry.getValue();
 
             if (lastHeartbeat.isBefore(threshold)) {
-                log.warn("하트비트 타임아웃으로 세션 정리: 세션 ID = {}", sessionId);
+                log.warn("⚠️ 하트비트 타임아웃! 세션 ID: {}", sessionId);
 
                 // 세션 정리
                 String busNumber = sessionToBusMap.get(sessionId);
@@ -417,6 +500,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
 
             return false;
         });
+
+        log.info("💓 하트비트 체크 완료");
+        log.info("💓 ======================================");
     }
 
     /**
@@ -427,7 +513,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession session = entry.getValue();
             if (session == null || !session.isOpen()) {
                 String busNumber = entry.getKey();
-                log.info("유효하지 않은 세션 정리: 버스 번호 = {}", busNumber);
+                log.info("🧹 유효하지 않은 세션 정리: 버스 번호 = {}", busNumber);
 
                 // 관련 맵에서도 제거
                 sessionToBusMap.values().removeIf(bn -> bn.equals(busNumber));
@@ -451,13 +537,15 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         cleanupInvalidSessions();
         int afterSize = driverSessions.size();
 
-        if (beforeSize != afterSize) {
-            log.info("세션 정리 완료: {} -> {} ({}개 정리)", beforeSize, afterSize, beforeSize - afterSize);
-        }
-
-        // 통계 로그
-        log.info("WebSocket 통계 - 총 메시지: {}, 총 위치 업데이트: {}, 활성 버스: {}",
-                totalMessagesReceived, totalLocationUpdates, afterSize);
+        log.info("📊 ========== WebSocket 통계 (5분 주기) ==========");
+        log.info("📊 총 수신 메시지: {}", totalMessagesReceived);
+        log.info("📊 총 위치 업데이트: {}", totalLocationUpdates);
+        log.info("📊 활성 버스 수: {} (정리됨: {})", afterSize, beforeSize - afterSize);
+        log.info("📊 세션별 버스 매핑:");
+        sessionToBusMap.forEach((sessionId, busNumber) -> {
+            log.info("📊   - 세션 {} → 버스 {}", sessionId.substring(0, 8), busNumber);
+        });
+        log.info("📊 =============================================");
     }
 
     /**
@@ -466,6 +554,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     private void cleanupSession(String sessionId, String busNumber) {
         if (busNumber != null) {
             driverSessions.remove(busNumber);
+            log.info("🧹 세션 정리: 버스 {} 제거됨", busNumber);
         }
         sessionToBusMap.remove(sessionId);
         sessionToOrganizationMap.remove(sessionId);
@@ -477,9 +566,11 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
      */
     @PreDestroy
     public void shutdown() {
-        log.info("BusDriverWebSocketHandler 종료 중...");
-        log.info("최종 통계 - 총 메시지: {}, 총 위치 업데이트: {}",
-                totalMessagesReceived, totalLocationUpdates);
+        log.warn("🛑 ========== BusDriverWebSocketHandler 종료 ==========");
+        log.warn("🛑 최종 통계:");
+        log.warn("🛑   - 총 메시지: {}", totalMessagesReceived);
+        log.warn("🛑   - 총 위치 업데이트: {}", totalLocationUpdates);
+        log.warn("🛑   - 활성 버스: {}", driverSessions.size());
 
         // 모든 세션 정리
         driverSessions.values().forEach(session -> {
@@ -488,7 +579,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                     session.close(CloseStatus.GOING_AWAY);
                 }
             } catch (Exception e) {
-                log.error("세션 종료 중 오류: {}", e.getMessage());
+                log.error("❌ 세션 종료 중 오류: {}", e.getMessage());
             }
         });
 
@@ -503,6 +594,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             Thread.currentThread().interrupt();
         }
 
-        log.info("BusDriverWebSocketHandler 종료 완료");
+        log.warn("🛑 BusDriverWebSocketHandler 종료 완료");
+        log.warn("🛑 ================================================");
     }
 }
