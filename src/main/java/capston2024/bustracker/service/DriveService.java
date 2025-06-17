@@ -105,7 +105,7 @@ public class DriveService {
 
             // 8. 조기 출발 여부 확인 (시간 제한 없음)
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduledStart = operation.getScheduledStart().minusHours(9);  // 시간 조정
+            LocalDateTime scheduledStart = operation.getScheduledStart();
             boolean isEarlyStart = now.isBefore(scheduledStart);
 
             log.info("=== 운행 시작 시간 정보 ===");
@@ -244,16 +244,12 @@ public class DriveService {
             List<BusOperation> todayOperations = busOperationRepository
                     .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                     .stream()
-                    .filter(op -> {
-                        // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
-                        LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
-                        return adjustedStart.isAfter(now) &&
-                                adjustedStart.isBefore(endOfDay) &&
-                                DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
-                                op.getBusId() != null &&
-                                op.getBusId().getId() != null &&
-                                op.getBusId().getId().toString().equals(bus.getId());
-                    })
+                    .filter(op -> op.getScheduledStart().isAfter(now) &&
+                            op.getScheduledStart().isBefore(endOfDay) &&
+                            DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
+                            op.getBusId() != null &&
+                            op.getBusId().getId() != null &&
+                            op.getBusId().getId().toString().equals(bus.getId()))
                     .sorted((a, b) -> a.getScheduledStart().compareTo(b.getScheduledStart()))
                     .toList();
 
@@ -438,10 +434,6 @@ public class DriveService {
      */
     private DriveStatusDTO buildDriveStatusDTO(BusOperation operation, Bus bus, User driver, boolean isEarlyStart, String message) {
         try {
-            // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
-            LocalDateTime adjustedScheduledStart = operation.getScheduledStart().minusHours(9);
-            LocalDateTime adjustedScheduledEnd = operation.getScheduledEnd().minusHours(9);
-
             DriveStatusDTO.DriveStatusDTOBuilder builder = DriveStatusDTO.builder()
                     .operationId(operation.getId())
                     .status(operation.getStatus())
@@ -451,8 +443,8 @@ public class DriveService {
                     .busIsOperate(bus.isOperate())
                     .driverId(driver.getId())
                     .driverName(driver.getName())
-                    .scheduledStart(adjustedScheduledStart)  // 조정된 시간 사용
-                    .scheduledEnd(adjustedScheduledEnd)      // 조정된 시간 사용
+                    .scheduledStart(operation.getScheduledStart())
+                    .scheduledEnd(operation.getScheduledEnd())
                     .isEarlyStart(isEarlyStart)
                     .message(message)
                     .hasNextDrive(false);

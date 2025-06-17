@@ -310,25 +310,17 @@ public class BusOperationService {
     }
 
     /**
-     * Entity를 DTO로 변환 - MongoDB UTC 변환 문제 해결
+     * Entity를 DTO로 변환 - 개선된 버전
      */
     private OperationPlanDTO convertToDTO(BusOperation operation) {
         log.debug("운행 일정 DTO 변환 시작 - ID: {}", operation.getId());
 
-        // MongoDB가 +9시간하여 저장했으므로, -9시간하여 원래 시간으로 복원
-        LocalDateTime adjustedStart = operation.getScheduledStart().minusHours(9);
-        LocalDateTime adjustedEnd = operation.getScheduledEnd().minusHours(9);
-
-        log.info("=== 시간 변환 처리 ===");
-        log.info("DB에서 읽은 시간: {} ~ {}", operation.getScheduledStart(), operation.getScheduledEnd());
-        log.info("조정된 시간: {} ~ {}", adjustedStart, adjustedEnd);
-
         OperationPlanDTO dto = OperationPlanDTO.builder()
                 .id(operation.getId())
                 .operationId(operation.getOperationId())
-                .operationDate(adjustedStart.toLocalDate())
-                .startTime(adjustedStart.toLocalTime())
-                .endTime(adjustedEnd.toLocalTime())
+                .operationDate(operation.getScheduledStart().toLocalDate())
+                .startTime(operation.getScheduledStart().toLocalTime())
+                .endTime(operation.getScheduledEnd().toLocalTime())
                 .status(operation.getStatus())
                 .isRecurring(operation.isRecurring())
                 .recurringWeeks(operation.getRecurringWeeks())
@@ -491,11 +483,8 @@ public class BusOperationService {
         List<BusOperation> operations = busOperationRepository
                 .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                 .stream()
-                .filter(op -> {
-                    // MongoDB가 +9시간하여 저장했으므로, -9시간하여 비교
-                    LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
-                    return !adjustedStart.isBefore(startOfDay) && !adjustedStart.isAfter(endOfDay);
-                })
+                .filter(op -> !op.getScheduledStart().isBefore(startOfDay)
+                        && !op.getScheduledStart().isAfter(endOfDay))
                 .collect(Collectors.toList());
 
         return operations.stream()
@@ -526,11 +515,8 @@ public class BusOperationService {
         List<BusOperation> operations = busOperationRepository
                 .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                 .stream()
-                .filter(op -> {
-                    // MongoDB가 +9시간하여 저장했으므로, -9시간하여 비교
-                    LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
-                    return !adjustedStart.isBefore(startOfDay) && !adjustedStart.isAfter(endOfDay);
-                })
+                .filter(op -> !op.getScheduledStart().isBefore(startOfDay)
+                        && !op.getScheduledStart().isAfter(endOfDay))
                 .collect(Collectors.toList());
 
         return operations.stream()
@@ -564,11 +550,8 @@ public class BusOperationService {
         List<BusOperation> operations = busOperationRepository
                 .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                 .stream()
-                .filter(op -> {
-                    // MongoDB가 +9시간하여 저장했으므로, -9시간하여 비교
-                    LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
-                    return !adjustedStart.isBefore(start) && !adjustedStart.isAfter(end);
-                })
+                .filter(op -> !op.getScheduledStart().isBefore(start)
+                        && !op.getScheduledStart().isAfter(end))
                 .collect(Collectors.toList());
 
         log.info("운전자 월간 운행 일정 조회 완료 - 총 {}개 일정", operations.size());
