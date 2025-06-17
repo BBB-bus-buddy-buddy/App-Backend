@@ -1,3 +1,4 @@
+// src/main/java/capston2024/bustracker/service/DriveService.java
 package capston2024.bustracker.service;
 
 import capston2024.bustracker.config.dto.*;
@@ -104,9 +105,14 @@ public class DriveService {
                 throw new BusinessException("이미 운행 중인 버스입니다: " + bus.getBusNumber());
             }
 
-            // 8. 출발 시간 검증
+            // 8. 출발 시간 검증 - MongoDB가 +9시간하여 저장했으므로 -9시간 적용
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduledStart = operation.getScheduledStart();
+            LocalDateTime scheduledStart = operation.getScheduledStart().minusHours(9);  // 시간 조정
+
+            log.info("=== 운행 시작 시간 검증 ===");
+            log.info("DB에서 읽은 시간: {}", operation.getScheduledStart());
+            log.info("조정된 예정 시간: {}", scheduledStart);
+            log.info("현재 시간: {}", now);
 
             if (requestDTO.isEarlyStart()) {
                 // 조기 출발인 경우 허용 시간 확인
@@ -227,26 +233,6 @@ public class DriveService {
     }
 
     /**
-     * 운행 중 위치 업데이트
-     * @deprecated WebSocket을 통한 실시간 위치 업데이트로 대체됨
-     *
-     * 위치 업데이트는 이제 다음과 같이 처리됩니다:
-     * 1. 운전자 앱에서 WebSocket으로 위치 정보 전송
-     * 2. BusDriverWebSocketHandler가 메시지 수신
-     * 3. BusService.updateBusLocation()으로 pendingLocationUpdates에 저장
-     * 4. BusService.flushLocationUpdates()가 주기적으로(10초마다) DB에 반영
-     */
-    @Deprecated
-    public Map<String, Object> updateLocation(DriveLocationUpdateDTO requestDTO, String driverEmail, String organizationId) {
-        log.warn("Deprecated 메서드 호출 - updateLocation은 더 이상 사용되지 않습니다. WebSocket을 사용하세요.");
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("updated", false);
-        response.put("warning", "이 메서드는 더 이상 사용되지 않습니다. WebSocket을 통한 실시간 위치 업데이트를 사용하세요.");
-        return response;
-    }
-
-    /**
      * 다음 운행 정보 조회
      */
     public DriveStatusDTO getNextDrive(String currentOperationId, String busNumber, String driverEmail, String organizationId) {
@@ -267,12 +253,16 @@ public class DriveService {
             List<BusOperation> todayOperations = busOperationRepository
                     .findByDriverIdAndOrganizationId(driver.getId(), organizationId)
                     .stream()
-                    .filter(op -> op.getScheduledStart().isAfter(now) &&
-                            op.getScheduledStart().isBefore(endOfDay) &&
-                            DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
-                            op.getBusId() != null &&
-                            op.getBusId().getId() != null &&
-                            op.getBusId().getId().toString().equals(bus.getId()))
+                    .filter(op -> {
+                        // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+                        LocalDateTime adjustedStart = op.getScheduledStart().minusHours(9);
+                        return adjustedStart.isAfter(now) &&
+                                adjustedStart.isBefore(endOfDay) &&
+                                DRIVE_STATUS_SCHEDULED.equals(op.getStatus()) &&
+                                op.getBusId() != null &&
+                                op.getBusId().getId() != null &&
+                                op.getBusId().getId().toString().equals(bus.getId());
+                    })
                     .sorted((a, b) -> a.getScheduledStart().compareTo(b.getScheduledStart()))
                     .toList();
 
@@ -366,7 +356,8 @@ public class DriveService {
                             .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + operationId)));
 
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime scheduledStart = operation.getScheduledStart();
+            // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+            LocalDateTime scheduledStart = operation.getScheduledStart().minusHours(9);
 
             Map<String, Object> result = new HashMap<>();
 
@@ -466,6 +457,10 @@ public class DriveService {
      */
     private DriveStatusDTO buildDriveStatusDTO(BusOperation operation, Bus bus, User driver, boolean isEarlyStart, String message) {
         try {
+            // MongoDB가 +9시간하여 저장했으므로 -9시간 적용
+            LocalDateTime adjustedScheduledStart = operation.getScheduledStart().minusHours(9);
+            LocalDateTime adjustedScheduledEnd = operation.getScheduledEnd().minusHours(9);
+
             DriveStatusDTO.DriveStatusDTOBuilder builder = DriveStatusDTO.builder()
                     .operationId(operation.getId())
                     .status(operation.getStatus())
@@ -475,8 +470,8 @@ public class DriveService {
                     .busIsOperate(bus.isOperate())
                     .driverId(driver.getId())
                     .driverName(driver.getName())
-                    .scheduledStart(operation.getScheduledStart())
-                    .scheduledEnd(operation.getScheduledEnd())
+                    .scheduledStart(adjustedScheduledStart)  // 조정된 시간 사용
+                    .scheduledEnd(adjustedScheduledEnd)      // 조정된 시간 사용
                     .isEarlyStart(isEarlyStart)
                     .message(message)
                     .hasNextDrive(false);
