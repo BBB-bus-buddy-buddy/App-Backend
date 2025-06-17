@@ -47,6 +47,10 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     private final Map<String, String> sessionToOrganizationMap = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastHeartbeatMap = new ConcurrentHashMap<>();
 
+    // 실시간 위치 추적을 위한 추가 맵
+    private final Map<String, BusRealTimeLocationDTO> lastKnownLocations = new ConcurrentHashMap<>();
+    private final Map<String, Instant> lastLocationUpdateTime = new ConcurrentHashMap<>();
+
     // 하트비트 체크를 위한 스케줄러
     private final ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(2);
 
@@ -99,6 +103,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         // 모든 맵에서 세션 정보 제거 (메모리 누수 방지)
         if (busNumber != null) {
             driverSessions.remove(busNumber);
+            lastKnownLocations.remove(busNumber);
+            lastLocationUpdateTime.remove(busNumber);
         }
 
         // 하트비트 정보 제거
@@ -174,7 +180,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    // handleLocationUpdate 메서드 수정
+    /**
+     * 위치 업데이트 처리 - 개선된 버전
+     */
     private void handleLocationUpdate(WebSocketSession session, Map<String, Object> messageData) {
         try {
             log.info("📍 ========== 위치 업데이트 처리 시작 ==========");
@@ -241,6 +249,23 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                 log.info("🆕 ========================================");
             }
 
+            // 실시간 위치 정보 저장 (승객 탑승 감지용)
+            lastKnownLocations.put(busNumber, locationUpdate);
+            lastLocationUpdateTime.put(busNumber, Instant.now());
+
+            // 위치 변화 감지 및 로깅
+            BusRealTimeLocationDTO previousLocation = lastKnownLocations.get(busNumber);
+            if (previousLocation != null) {
+                double distance = calculateDistance(
+                        previousLocation.getLatitude(), previousLocation.getLongitude(),
+                        latitude, longitude
+                );
+
+                if (distance > 5) { // 5미터 이상 이동시
+                    log.info("🚍 버스 {} 이동 감지: {}m 이동", busNumber, Math.round(distance));
+                }
+            }
+
             // BusService로 위치 업데이트 전달
             busService.updateBusLocation(locationUpdate);
 
@@ -259,7 +284,9 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    // handleLegacyLocationUpdate 메서드도 동일하게 수정
+    /**
+     * 레거시 위치 업데이트 처리
+     */
     private void handleLegacyLocationUpdate(WebSocketSession session, String payload) throws Exception {
         log.info("🔄 ========== 레거시 위치 업데이트 처리 ==========");
 
@@ -289,6 +316,10 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
 
                 log.info("🆕 레거시 버스 기사 등록: 버스 {}, 조직 {}", busNumber, organizationId);
             }
+
+            // 실시간 위치 정보 저장
+            lastKnownLocations.put(busNumber, locationUpdate);
+            lastLocationUpdateTime.put(busNumber, Instant.now());
 
             // BusService로 위치 업데이트 전달
             busService.updateBusLocation(locationUpdate);
@@ -385,6 +416,20 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
+     * 버스의 마지막 알려진 위치 조회
+     */
+    public BusRealTimeLocationDTO getLastKnownLocation(String busNumber) {
+        return lastKnownLocations.get(busNumber);
+    }
+
+    /**
+     * 모든 버스의 실시간 위치 조회
+     */
+    public Map<String, BusRealTimeLocationDTO> getAllBusLocations() {
+        return new ConcurrentHashMap<>(lastKnownLocations);
+    }
+
+    /**
      * 통계 정보 조회
      */
     public Map<String, Object> getStatistics() {
@@ -392,7 +437,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                 "totalMessagesReceived", totalMessagesReceived,
                 "totalLocationUpdates", totalLocationUpdates,
                 "activeBusDrivers", getActiveBusDriverCount(),
-                "activeBuses", getActiveBusNumbers()
+                "activeBuses", getActiveBusNumbers(),
+                "realtimeLocations", lastKnownLocations.size()
         );
     }
 
@@ -475,11 +521,29 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
+     * 거리 계산 (미터 단위)
+     */
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371000; // 지구의 반지름 (미터)
+        double lat1Rad = Math.toRadians(lat1);
+        double lon1Rad = Math.toRadians(lon1);
+        double lat2Rad = Math.toRadians(lat2);
+        double lon2Rad = Math.toRadians(lon2);
+        double dLat = lat2Rad - lat1Rad;
+        double dLon = lon2Rad - lon1Rad;
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    /**
      * 하트비트 체크 - 비활성 연결 감지 및 정리
      */
-    @Scheduled(fixedRate = 60000) // 1분마다 실행
+    @Scheduled(fixedRate = 30000) // 30초마다 실행 (60초에서 단축)
     private void checkHeartbeats() {
-        Instant threshold = Instant.now().minusSeconds(300); // 5분 임계값
+        Instant threshold = Instant.now().minusSeconds(120); // 2분 임계값 (5분에서 단축)
 
         log.info("💓 ========== 하트비트 체크 시작 ==========");
         log.info("💓 현재 활성 세션 수: {}", lastHeartbeatMap.size());
@@ -521,6 +585,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
                         busNumber.equals(sessionToBusMap.get(sid)));
                 lastHeartbeatMap.keySet().removeIf(sid ->
                         busNumber.equals(sessionToBusMap.get(sid)));
+                lastKnownLocations.remove(busNumber);
+                lastLocationUpdateTime.remove(busNumber);
 
                 return true;
             }
@@ -541,6 +607,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         log.info("📊 총 수신 메시지: {}", totalMessagesReceived);
         log.info("📊 총 위치 업데이트: {}", totalLocationUpdates);
         log.info("📊 활성 버스 수: {} (정리됨: {})", afterSize, beforeSize - afterSize);
+        log.info("📊 실시간 위치 추적 중: {}대", lastKnownLocations.size());
         log.info("📊 세션별 버스 매핑:");
         sessionToBusMap.forEach((sessionId, busNumber) -> {
             log.info("📊   - 세션 {} → 버스 {}", sessionId.substring(0, 8), busNumber);
@@ -554,6 +621,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     private void cleanupSession(String sessionId, String busNumber) {
         if (busNumber != null) {
             driverSessions.remove(busNumber);
+            lastKnownLocations.remove(busNumber);
+            lastLocationUpdateTime.remove(busNumber);
             log.info("🧹 세션 정리: 버스 {} 제거됨", busNumber);
         }
         sessionToBusMap.remove(sessionId);
