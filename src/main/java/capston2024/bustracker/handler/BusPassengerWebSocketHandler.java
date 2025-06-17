@@ -417,7 +417,7 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
             log.info("🎯 [승객WebSocket] 위치 처리 완료: 감지 결과 = {}, 사용자 ID = {}",
                     result, userId);
 
-            // 자동 탑승/하차 감지 결과에 따라 프론트엔드에 메시지 전송
+            // 자동 탑승/하차 감지 결과에 따라 메시지 전송
             switch (result) {
                 case BOARDED:
                     PassengerLocationService.PassengerState state = getPassengerLocationService().getPassengerState(locationDTO.getUserId());
