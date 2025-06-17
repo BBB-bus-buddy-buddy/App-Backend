@@ -362,48 +362,259 @@ public class BusService {
     }
 
     /**
-     * 승객 탑승/하차 처리
+     * 승객 탑승/하차 처리 - 웹소켓을 통한 실시간 좌석 수 업데이트
+     * BusPassengerWebSocketHandler와 PassengerLocationService에서 호출됨
      */
     @Transactional
     public boolean processBusBoarding(BusBoardingDTO boardingDTO) {
-        log.info("승객 탑승/하차 처리: 버스={}, 사용자={}, 액션={}",
-                boardingDTO.getBusNumber(), boardingDTO.getUserId(), boardingDTO.getAction());
+        log.info("🎫 ============= 승객 탑승/하차 처리 시작 =============");
+        log.info("🎫 버스: {}, 사용자: {}, 액션: {}, 조직: {}",
+                boardingDTO.getBusNumber(), boardingDTO.getUserId(),
+                boardingDTO.getAction(), boardingDTO.getOrganizationId());
 
-        Bus bus = getBusByNumberAndOrganization(boardingDTO.getBusNumber(), boardingDTO.getOrganizationId());
+        try {
+            // 1. 버스 조회
+            Bus bus = getBusByNumberAndOrganization(boardingDTO.getBusNumber(), boardingDTO.getOrganizationId());
 
-        // 운행 중지된 버스인지 확인
-        if (!bus.isOperate()) {
-            log.warn("버스 {} 탑승/하차 실패: 운행이 중지된 버스입니다", boardingDTO.getBusNumber());
+            log.info("🚌 버스 정보 - 번호: {}, 실제번호: {}, 총좌석: {}, 사용중: {}, 가능: {}, 운행상태: {}",
+                    bus.getBusNumber(), bus.getBusRealNumber(),
+                    bus.getTotalSeats(), bus.getOccupiedSeats(),
+                    bus.getAvailableSeats(), bus.isOperate());
+
+            // 2. 운행 상태 확인
+            if (!bus.isOperate()) {
+                log.warn("❌ 버스 {} 탑승/하차 실패: 운행이 중지된 버스입니다", boardingDTO.getBusNumber());
+                return false;
+            }
+
+            // 3. 좌석 수 업데이트 전 상태 저장
+            int previousOccupied = bus.getOccupiedSeats();
+            int previousAvailable = bus.getAvailableSeats();
+            boolean updateSuccess = false;
+
+            // 4. 탑승/하차 처리
+            if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD) {
+                // ========== 탑승 처리 ==========
+                log.info("🚌 탑승 처리 시작");
+
+                // 좌석 가용성 확인
+                if (bus.getOccupiedSeats() >= bus.getTotalSeats()) {
+                    log.warn("❌ 버스 {} 탑승 실패: 좌석이 모두 찼습니다 (사용중: {}/{})",
+                            boardingDTO.getBusNumber(), bus.getOccupiedSeats(), bus.getTotalSeats());
+
+                    // 만석 상태 이벤트 발생
+                    publishSeatFullEvent(bus, boardingDTO.getUserId());
+                    return false;
+                }
+
+                // 좌석 수 증가
+                bus.setOccupiedSeats(bus.getOccupiedSeats() + 1);
+                bus.setAvailableSeats(bus.getAvailableSeats() - 1);
+                updateSuccess = true;
+
+                log.info("✅ 탑승 처리 완료 - 사용중: {} -> {}, 가능: {} -> {}",
+                        previousOccupied, bus.getOccupiedSeats(),
+                        previousAvailable, bus.getAvailableSeats());
+
+            } else if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.ALIGHT) {
+                // ========== 하차 처리 ==========
+                log.info("🚪 하차 처리 시작");
+
+                // 하차 가능 여부 확인
+                if (bus.getOccupiedSeats() <= 0) {
+                    log.warn("❌ 버스 {} 하차 실패: 이미 버스에 탑승한 승객이 없습니다",
+                            boardingDTO.getBusNumber());
+                    return false;
+                }
+
+                // 좌석 수 감소
+                bus.setOccupiedSeats(bus.getOccupiedSeats() - 1);
+                bus.setAvailableSeats(bus.getAvailableSeats() + 1);
+                updateSuccess = true;
+
+                log.info("✅ 하차 처리 완료 - 사용중: {} -> {}, 가능: {} -> {}",
+                        previousOccupied, bus.getOccupiedSeats(),
+                        previousAvailable, bus.getAvailableSeats());
+            }
+
+            // 5. 데이터 정합성 검증
+            if (bus.getOccupiedSeats() + bus.getAvailableSeats() != bus.getTotalSeats()) {
+                log.error("⚠️ 좌석 수 불일치 감지! 총: {}, 사용중: {}, 가능: {}",
+                        bus.getTotalSeats(), bus.getOccupiedSeats(), bus.getAvailableSeats());
+
+                // 자동 보정
+                bus.setAvailableSeats(bus.getTotalSeats() - bus.getOccupiedSeats());
+                log.warn("🔧 좌석 수 자동 보정 완료 - 가능 좌석: {}", bus.getAvailableSeats());
+            }
+
+            // 6. 타임스탬프 업데이트
+            bus.setTimestamp(Instant.now());
+
+            // 7. DB 저장
+            if (updateSuccess) {
+                busRepository.save(bus);
+
+                // 8. 좌석 점유율 계산
+                double occupancyRate = bus.getTotalSeats() > 0 ?
+                        (double) bus.getOccupiedSeats() / bus.getTotalSeats() * 100 : 0;
+
+                log.info("📊 버스 {} 현재 상태 - 점유율: {:.1f}% ({}/{})",
+                        bus.getBusNumber(), occupancyRate,
+                        bus.getOccupiedSeats(), bus.getTotalSeats());
+
+                // 9. 실시간 상태 업데이트 브로드캐스트
+                broadcastBusStatusUpdate(bus);
+
+                // 10. 탑승/하차 이벤트 발생
+                publishBoardingEvent(boardingDTO, bus, previousOccupied, previousAvailable);
+
+                // 11. 특정 상황에 대한 알림
+                checkAndNotifySpecialConditions(bus, boardingDTO);
+
+                log.info("🎫 ============= 승객 탑승/하차 처리 완료 =============");
+                return true;
+            }
+
+            return false;
+
+        } catch (Exception e) {
+            log.error("❌ 승객 탑승/하차 처리 중 오류 발생", e);
             return false;
         }
+    }
 
-        if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD) {
-            // 탑승 처리
-            if (bus.getOccupiedSeats() >= bus.getTotalSeats()) {
-                log.warn("버스 {} 탑승 실패: 좌석이 모두 찼습니다", boardingDTO.getBusNumber());
-                return false;
-            }
+    /**
+     * 탑승/하차 이벤트 발행
+     */
+    private void publishBoardingEvent(BusBoardingDTO boardingDTO, Bus bus,
+                                      int previousOccupied, int previousAvailable) {
+        try {
+            Map<String, Object> eventData = Map.of(
+                    "busNumber", bus.getBusNumber(),
+                    "busRealNumber", bus.getBusRealNumber() != null ? bus.getBusRealNumber() : "",
+                    "userId", boardingDTO.getUserId(),
+                    "action", boardingDTO.getAction().name(),
+                    "previousOccupiedSeats", previousOccupied,
+                    "currentOccupiedSeats", bus.getOccupiedSeats(),
+                    "previousAvailableSeats", previousAvailable,
+                    "currentAvailableSeats", bus.getAvailableSeats(),
+                    "totalSeats", bus.getTotalSeats(),
+                    "timestamp", boardingDTO.getTimestamp()
+            );
 
-            bus.setOccupiedSeats(bus.getOccupiedSeats() + 1);
-            bus.setAvailableSeats(bus.getTotalSeats() - bus.getOccupiedSeats());
+            // 탑승/하차 이벤트 발행
+            eventPublisher.publishEvent(new BusBoardingEvent(
+                    bus.getOrganizationId(),
+                    bus.getBusNumber(),
+                    boardingDTO.getUserId(),
+                    boardingDTO.getAction(),
+                    eventData
+            ));
 
-        } else {
-            // 하차 처리
-            if (bus.getOccupiedSeats() <= 0) {
-                log.warn("버스 {} 하차 실패: 이미 버스에 탑승한 승객이 없습니다", boardingDTO.getBusNumber());
-                return false;
-            }
-
-            bus.setOccupiedSeats(bus.getOccupiedSeats() - 1);
-            bus.setAvailableSeats(bus.getTotalSeats() - bus.getOccupiedSeats());
+            log.debug("탑승/하차 이벤트 발행 - 버스: {}, 사용자: {}, 액션: {}",
+                    bus.getBusNumber(), boardingDTO.getUserId(), boardingDTO.getAction());
+        } catch (Exception e) {
+            log.error("탑승/하차 이벤트 발행 중 오류", e);
         }
+    }
 
-        busRepository.save(bus);
+    /**
+     * 만석 이벤트 발행
+     */
+    private void publishSeatFullEvent(Bus bus, String userId) {
+        try {
+            Map<String, Object> eventData = Map.of(
+                    "busNumber", bus.getBusNumber(),
+                    "busRealNumber", bus.getBusRealNumber() != null ? bus.getBusRealNumber() : "",
+                    "userId", userId,
+                    "message", "버스가 만석입니다",
+                    "totalSeats", bus.getTotalSeats(),
+                    "timestamp", System.currentTimeMillis()
+            );
 
-        // 변경사항을 클라이언트에게 브로드캐스트
-        broadcastBusStatusUpdate(bus);
+            eventPublisher.publishEvent(new BusSeatFullEvent(
+                    bus.getOrganizationId(),
+                    bus.getBusNumber(),
+                    eventData
+            ));
 
-        return true;
+            log.info("🚫 만석 이벤트 발행 - 버스: {}", bus.getBusNumber());
+        } catch (Exception e) {
+            log.error("만석 이벤트 발행 중 오류", e);
+        }
+    }
+
+    /**
+     * 특정 조건에 대한 알림 체크
+     */
+    private void checkAndNotifySpecialConditions(Bus bus, BusBoardingDTO boardingDTO) {
+        try {
+            // 거의 만석 상태 알림 (90% 이상)
+            double occupancyRate = (double) bus.getOccupiedSeats() / bus.getTotalSeats() * 100;
+            if (occupancyRate >= 90 && occupancyRate < 100) {
+                log.info("⚠️ 버스 {} 거의 만석 - 점유율: {:.1f}%, 남은 좌석: {}",
+                        bus.getBusNumber(), occupancyRate, bus.getAvailableSeats());
+
+                Map<String, Object> almostFullData = Map.of(
+                        "busNumber", bus.getBusNumber(),
+                        "occupancyRate", String.format("%.1f", occupancyRate),
+                        "availableSeats", bus.getAvailableSeats(),
+                        "message", String.format("잔여 좌석 %d석", bus.getAvailableSeats())
+                );
+
+                eventPublisher.publishEvent(new BusAlmostFullEvent(
+                        bus.getOrganizationId(),
+                        bus.getBusNumber(),
+                        almostFullData
+                ));
+            }
+
+            // 첫 승객 탑승 알림
+            if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD
+                    && bus.getOccupiedSeats() == 1) {
+                log.info("🎉 버스 {} 첫 승객 탑승", bus.getBusNumber());
+            }
+
+            // 마지막 승객 하차 알림
+            if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.ALIGHT
+                    && bus.getOccupiedSeats() == 0) {
+                log.info("👋 버스 {} 모든 승객 하차 완료", bus.getBusNumber());
+            }
+        } catch (Exception e) {
+            log.error("특정 조건 알림 체크 중 오류", e);
+        }
+    }
+
+    /**
+     * 탑승/하차 이벤트 클래스
+     */
+    public record BusBoardingEvent(
+            String organizationId,
+            String busNumber,
+            String userId,
+            BusBoardingDTO.BoardingAction action,
+            Map<String, Object> eventData
+    ) {
+    }
+
+    /**
+     * 만석 이벤트 클래스
+     */
+    public record BusSeatFullEvent(
+            String organizationId,
+            String busNumber,
+            Map<String, Object> eventData
+    ) {
+    }
+
+    /**
+     * 거의 만석 이벤트 클래스
+     */
+    public record BusAlmostFullEvent(
+            String organizationId,
+            String busNumber,
+            Map<String, Object> eventData
+    ) {
     }
 
     /**
@@ -455,6 +666,7 @@ public class BusService {
     /**
      * 조직의 운행 중인 버스들의 실시간 위치 정보 조회
      * PassengerLocationService에서 사용하기 위한 메서드
+     *
      * @param organizationId 조직 ID
      * @return 운행 중인 버스들의 실시간 위치 맵
      */
@@ -543,7 +755,7 @@ public class BusService {
     /**
      * 버스 상태 업데이트를 클라이언트에게 브로드캐스트
      */
-    private void broadcastBusStatusUpdate(Bus bus) {
+    public void broadcastBusStatusUpdate(Bus bus) {
         BusRealTimeStatusDTO statusDTO = convertToStatusDTO(bus);
         eventPublisher.publishEvent(new BusStatusUpdateEvent(bus.getOrganizationId(), statusDTO));
     }

@@ -3,6 +3,7 @@ package capston2024.bustracker.handler;
 import capston2024.bustracker.config.ConnectionLimitInterceptor;
 import capston2024.bustracker.config.dto.BusBoardingDTO;
 import capston2024.bustracker.config.dto.BusRealTimeStatusDTO;
+import capston2024.bustracker.config.dto.BusSeatDTO;
 import capston2024.bustracker.config.dto.PassengerLocationDTO;
 import capston2024.bustracker.service.BusService;
 import capston2024.bustracker.service.PassengerLocationService;
@@ -198,6 +199,12 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
                 case "get_bus_status":
                     handleGetBusStatus(session, data);
                     break;
+                case "get_seat_info":
+                    handleGetSeatInfo(session, data);
+                    break;
+                case "batch_boarding":
+                    handleBatchBoardingMessage(session, data);
+                    break;
                 default:
                     log.warn("❓ [승객WebSocket] 알 수 없는 메시지 타입: {} - 세션 ID = {}",
                             messageType, sessionId);
@@ -208,6 +215,123 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
             log.error("❌ [승객WebSocket] 메시지 처리 중 오류: 세션 ID = {}, 페이로드 = {}, 오류 = {}",
                     sessionId, payload, e.getMessage(), e);
             sendErrorMessage(session, "메시지 처리 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 다수 승객 탑승/하차 처리 (버스 기사용)
+     */
+    private void handleBatchBoardingMessage(WebSocketSession session, Map<String, Object> data) {
+        log.info("👥 [다수탑승/하차] 메시지 처리 시작 - 세션 ID: {}", session.getId());
+
+        try {
+            Map<String, Object> batchData = (Map<String, Object>) data.get("data");
+            if (batchData == null) {
+                sendErrorMessage(session, "배치 탑승/하차 데이터가 필요합니다.");
+                return;
+            }
+
+            String busNumber = (String) batchData.get("busNumber");
+            String actionStr = (String) batchData.get("action");
+            Integer count = getIntegerValue(batchData.get("count"));
+            String organizationId = (String) data.get("organizationId");
+
+            log.info("👥 [다수탑승/하차] 정보 - 버스: {}, 액션: {}, 인원: {}명",
+                    busNumber, actionStr, count);
+
+            // 검증
+            if (busNumber == null || actionStr == null || count == null || count < 1) {
+                sendErrorMessage(session, "버스 번호, 액션, 인원수(1명 이상)가 필요합니다.");
+                return;
+            }
+
+            if (count > 100) {
+                sendErrorMessage(session, "한 번에 처리할 수 있는 최대 인원은 100명입니다.");
+                return;
+            }
+
+            // 액션 검증
+            BusBoardingDTO.BoardingAction action;
+            try {
+                action = BusBoardingDTO.BoardingAction.valueOf(actionStr.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                sendErrorMessage(session, "유효하지 않은 액션입니다. BOARD 또는 ALIGHT를 사용하세요.");
+                return;
+            }
+
+            // 처리 전 상태
+            BusSeatDTO beforeSeatInfo = getBusService().getBusSeatsByBusNumber(busNumber, organizationId);
+
+            // 각 승객에 대해 처리
+            int successCount = 0;
+            int failCount = 0;
+
+            for (int i = 0; i < count; i++) {
+                BusBoardingDTO boardingDTO = new BusBoardingDTO();
+                boardingDTO.setBusNumber(busNumber);
+                boardingDTO.setOrganizationId(organizationId);
+                boardingDTO.setUserId("batch_user_" + System.currentTimeMillis() + "_" + i);
+                boardingDTO.setAction(action);
+                boardingDTO.setTimestamp(System.currentTimeMillis());
+
+                boolean success = getBusService().processBusBoarding(boardingDTO);
+                if (success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    // 더 이상 처리할 수 없으면 중단
+                    break;
+                }
+            }
+
+            // 처리 후 상태
+            BusSeatDTO afterSeatInfo = getBusService().getBusSeatsByBusNumber(busNumber, organizationId);
+
+            // 응답 메시지
+            Map<String, Object> response = Map.of(
+                    "type", "batch_boarding_response",
+                    "status", failCount == 0 ? "success" : "partial",
+                    "message", String.format("%d명 처리 완료, %d명 실패", successCount, failCount),
+                    "busNumber", busNumber,
+                    "action", action.name(),
+                    "requested", count,
+                    "processed", successCount,
+                    "failed", failCount,
+                    "seatInfo", Map.of(
+                            "before", Map.of(
+                                    "occupiedSeats", beforeSeatInfo.getOccupiedSeats(),
+                                    "availableSeats", beforeSeatInfo.getAvailableSeats()
+                            ),
+                            "after", Map.of(
+                                    "occupiedSeats", afterSeatInfo.getOccupiedSeats(),
+                                    "availableSeats", afterSeatInfo.getAvailableSeats(),
+                                    "totalSeats", afterSeatInfo.getTotalSeats()
+                            ),
+                            "occupancyRate", String.format("%.1f%%",
+                                    (double) afterSeatInfo.getOccupiedSeats() / afterSeatInfo.getTotalSeats() * 100)
+                    ),
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("👥 [다수탑승/하차] 처리 완료 - 성공: {}, 실패: {}", successCount, failCount);
+
+        } catch (Exception e) {
+            log.error("❌ [다수탑승/하차] 처리 중 오류", e);
+            sendErrorMessage(session, "다수 탑승/하차 처리 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    private Integer getIntegerValue(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
@@ -453,15 +577,17 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 승객 탑승/하차 메시지 처리
+     * 승객 탑승/하차 메시지 처리 - 좌석 수 실시간 업데이트 포함
      */
     private void handleBoardingMessage(WebSocketSession session, Map<String, Object> data) {
-        log.info("🚌 [승객WebSocket] 탑승/하차 메시지 처리 시작: 세션 ID = {}", session.getId());
+        log.info("🚌 [탑승/하차] ============= 메시지 처리 시작 =============");
+        log.info("🚌 [탑승/하차] 세션 ID: {}", session.getId());
 
         try {
+            // 1. 데이터 추출
             Map<String, Object> boardingData = (Map<String, Object>) data.get("data");
             if (boardingData == null) {
-                log.warn("❌ [승객WebSocket] 탑승/하차 데이터 누락: 세션 ID = {}", session.getId());
+                log.warn("❌ [탑승/하차] 탑승/하차 데이터 누락: 세션 ID = {}", session.getId());
                 sendErrorMessage(session, "탑승/하차 데이터가 필요합니다.");
                 return;
             }
@@ -469,53 +595,221 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
             String busNumber = (String) boardingData.get("busNumber");
             String userId = (String) boardingData.get("userId");
             String actionStr = (String) boardingData.get("action");
+            String organizationId = (String) data.get("organizationId");
 
-            log.info("🎫 [승객WebSocket] 탑승/하차 정보: 버스 번호 = {}, 사용자 ID = {}, 액션 = {}",
-                    busNumber, userId, actionStr);
+            log.info("🎫 [탑승/하차] 정보 추출 - 버스: {}, 사용자: {}, 액션: {}, 조직: {}",
+                    busNumber, userId, actionStr, organizationId);
 
+            // 2. 필수 필드 검증
             if (busNumber == null || userId == null || actionStr == null) {
-                log.warn("❌ [승객WebSocket] 필수 탑승/하차 정보 누락: 버스 번호 = {}, 사용자 ID = {}, 액션 = {}",
-                        busNumber, userId, actionStr);
+                log.warn("❌ [탑승/하차] 필수 필드 누락");
                 sendErrorMessage(session, "버스 번호, 사용자 ID, 액션이 필요합니다.");
                 return;
             }
 
+            // 3. DTO 생성
             BusBoardingDTO boardingDTO = new BusBoardingDTO();
             boardingDTO.setBusNumber(busNumber);
-            boardingDTO.setOrganizationId((String) data.get("organizationId"));
+            boardingDTO.setOrganizationId(organizationId);
             boardingDTO.setUserId(userId);
 
             try {
                 boardingDTO.setAction(BusBoardingDTO.BoardingAction.valueOf(actionStr.toUpperCase()));
-                log.info("✅ [승객WebSocket] 액션 설정 완료: {}", boardingDTO.getAction());
+                log.info("✅ [탑승/하차] 액션 설정 완료: {}", boardingDTO.getAction());
             } catch (IllegalArgumentException e) {
-                log.warn("❌ [승객WebSocket] 유효하지 않은 액션: {}", actionStr);
+                log.warn("❌ [탑승/하차] 유효하지 않은 액션: {}", actionStr);
                 sendErrorMessage(session, "유효하지 않은 액션입니다. BOARD 또는 ALIGHT를 사용하세요.");
                 return;
             }
 
             boardingDTO.setTimestamp(System.currentTimeMillis());
 
-            log.info("🚀 [승객WebSocket] BusService.processBusBoarding 호출");
+            // 4. 처리 전 버스 상태 조회 (비교용)
+            BusSeatDTO beforeSeatInfo = getBusService().getBusSeatsByBusNumber(busNumber, organizationId);
+            log.info("📊 [탑승/하차] 처리 전 좌석 상태 - 사용중: {}/{}, 가능: {}",
+                    beforeSeatInfo.getOccupiedSeats(),
+                    beforeSeatInfo.getTotalSeats(),
+                    beforeSeatInfo.getAvailableSeats());
+
+            // 5. BusService를 통한 탑승/하차 처리
+            log.info("🚀 [탑승/하차] BusService.processBusBoarding 호출");
             boolean success = getBusService().processBusBoarding(boardingDTO);
 
-            log.info("🎯 [승객WebSocket] 탑승/하차 처리 결과: 성공 = {}, 액션 = {}",
-                    success, boardingDTO.getAction());
+            log.info("🎯 [탑승/하차] 처리 결과: {}", success ? "성공" : "실패");
 
+            // 6. 처리 후 버스 상태 조회
+            BusSeatDTO afterSeatInfo = getBusService().getBusSeatsByBusNumber(busNumber, organizationId);
+
+            // 7. 응답 메시지 생성
             if (success) {
-                String message = boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD ?
-                        "탑승이 성공적으로 처리되었습니다." : "하차가 성공적으로 처리되었습니다.";
-                sendSuccessMessage(session, message);
-                log.info("🎉 [승객WebSocket] 탑승/하차 성공 응답 전송: {}", message);
+                String actionMessage = boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD ?
+                        "탑승이 완료되었습니다." : "하차가 완료되었습니다.";
+
+                // 좌석 변화 정보 계산
+                int seatChange = Math.abs(afterSeatInfo.getOccupiedSeats() - beforeSeatInfo.getOccupiedSeats());
+
+                // 성공 응답 (좌석 정보 포함)
+                Map<String, Object> successResponse = Map.of(
+                        "type", "boarding_response",
+                        "status", "success",
+                        "message", actionMessage,
+                        "action", boardingDTO.getAction().name(),
+                        "busNumber", busNumber,
+                        "userId", userId,
+                        "seatInfo", Map.of(
+                                "before", Map.of(
+                                        "occupiedSeats", beforeSeatInfo.getOccupiedSeats(),
+                                        "availableSeats", beforeSeatInfo.getAvailableSeats()
+                                ),
+                                "after", Map.of(
+                                        "occupiedSeats", afterSeatInfo.getOccupiedSeats(),
+                                        "availableSeats", afterSeatInfo.getAvailableSeats(),
+                                        "totalSeats", afterSeatInfo.getTotalSeats()
+                                ),
+                                "change", seatChange,
+                                "occupancyRate", String.format("%.1f%%",
+                                        (double) afterSeatInfo.getOccupiedSeats() / afterSeatInfo.getTotalSeats() * 100)
+                        ),
+                        "timestamp", System.currentTimeMillis()
+                );
+
+                sendMessage(session, successResponse);
+
+                log.info("🎉 [탑승/하차] {} 성공 - 좌석 변화: {} -> {} ({}{})",
+                        boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD ? "탑승" : "하차",
+                        beforeSeatInfo.getOccupiedSeats(),
+                        afterSeatInfo.getOccupiedSeats(),
+                        boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD ? "+" : "-",
+                        seatChange);
+
+                // 거의 만석/만석 상태 추가 알림
+                if (afterSeatInfo.getAvailableSeats() == 0) {
+                    sendWarningMessage(session, "⚠️ 버스가 만석입니다!");
+                } else if (afterSeatInfo.getAvailableSeats() <= 5) {
+                    sendWarningMessage(session, String.format("⚠️ 잔여 좌석 %d석", afterSeatInfo.getAvailableSeats()));
+                }
+
             } else {
-                log.warn("⚠️ [승객WebSocket] 탑승/하차 처리 실패");
-                sendErrorMessage(session, "탑승/하차 처리에 실패했습니다. 버스 상태를 확인해주세요.");
+                // 실패 이유 분석
+                String failureReason;
+                if (!afterSeatInfo.isOperate()) {
+                    failureReason = "운행 중이 아닌 버스입니다.";
+                } else if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.BOARD
+                        && afterSeatInfo.getAvailableSeats() == 0) {
+                    failureReason = "버스가 만석입니다.";
+                } else if (boardingDTO.getAction() == BusBoardingDTO.BoardingAction.ALIGHT
+                        && afterSeatInfo.getOccupiedSeats() == 0) {
+                    failureReason = "버스에 탑승한 승객이 없습니다.";
+                } else {
+                    failureReason = "처리할 수 없는 요청입니다.";
+                }
+
+                // 실패 응답 (현재 좌석 정보 포함)
+                Map<String, Object> failureResponse = Map.of(
+                        "type", "boarding_response",
+                        "status", "failure",
+                        "message", failureReason,
+                        "action", boardingDTO.getAction().name(),
+                        "busNumber", busNumber,
+                        "currentSeatInfo", Map.of(
+                                "occupiedSeats", afterSeatInfo.getOccupiedSeats(),
+                                "availableSeats", afterSeatInfo.getAvailableSeats(),
+                                "totalSeats", afterSeatInfo.getTotalSeats(),
+                                "isOperating", afterSeatInfo.isOperate()
+                        ),
+                        "timestamp", System.currentTimeMillis()
+                );
+
+                sendMessage(session, failureResponse);
+
+                log.warn("⚠️ [탑승/하차] 처리 실패 - 이유: {}", failureReason);
             }
 
+            log.info("🚌 [탑승/하차] ============= 메시지 처리 완료 =============");
+
         } catch (Exception e) {
-            log.error("❌ [승객WebSocket] 탑승/하차 메시지 처리 중 오류: 세션 ID = {}, 오류 = {}",
-                    session.getId(), e.getMessage(), e);
+            log.error("❌ [탑승/하차] 메시지 처리 중 오류", e);
             sendErrorMessage(session, "탑승/하차 처리 중 오류가 발생했습니다: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 경고 메시지 전송 (좌석 부족 등)
+     */
+    private void sendWarningMessage(WebSocketSession session, String warningMessage) {
+        log.warn("⚠️ [경고] 메시지 전송: 세션 ID = {}, 메시지 = {}",
+                session.getId(), warningMessage);
+
+        try {
+            Map<String, Object> response = Map.of(
+                    "type", "warning",
+                    "message", warningMessage,
+                    "timestamp", System.currentTimeMillis()
+            );
+            sendMessage(session, response);
+        } catch (Exception e) {
+            log.error("❌ [경고] 메시지 전송 중 오류", e);
+        }
+    }
+
+    /**
+     * 좌석 정보 조회 메시지 처리
+     */
+    private void handleGetSeatInfo(WebSocketSession session, Map<String, Object> data) {
+        log.info("💺 [좌석정보] 조회 요청 - 세션 ID: {}", session.getId());
+
+        try {
+            String busNumber = (String) data.get("busNumber");
+            String organizationId = (String) data.get("organizationId");
+
+            if (busNumber == null || organizationId == null) {
+                sendErrorMessage(session, "버스 번호와 조직 ID가 필요합니다.");
+                return;
+            }
+
+            // 좌석 정보 조회
+            BusSeatDTO seatInfo = getBusService().getBusSeatsByBusNumber(busNumber, organizationId);
+
+            // 좌석 상태 메시지 생성
+            String statusMessage;
+            String statusLevel;
+            if (seatInfo.getAvailableSeats() == 0) {
+                statusMessage = "만석";
+                statusLevel = "critical";
+            } else if (seatInfo.getAvailableSeats() <= 5) {
+                statusMessage = String.format("잔여 %d석", seatInfo.getAvailableSeats());
+                statusLevel = "warning";
+            } else {
+                statusMessage = String.format("여유 %d석", seatInfo.getAvailableSeats());
+                statusLevel = "normal";
+            }
+
+            // 응답 메시지
+            Map<String, Object> response = Map.of(
+                    "type", "seat_info_response",
+                    "busNumber", seatInfo.getBusNumber(),
+                    "busRealNumber", seatInfo.getBusRealNumber() != null ? seatInfo.getBusRealNumber() : "",
+                    "seatInfo", Map.of(
+                            "totalSeats", seatInfo.getTotalSeats(),
+                            "occupiedSeats", seatInfo.getOccupiedSeats(),
+                            "availableSeats", seatInfo.getAvailableSeats(),
+                            "occupancyRate", String.format("%.1f%%",
+                                    (double) seatInfo.getOccupiedSeats() / seatInfo.getTotalSeats() * 100),
+                            "statusMessage", statusMessage,
+                            "statusLevel", statusLevel,
+                            "isOperating", seatInfo.isOperate()
+                    ),
+                    "timestamp", System.currentTimeMillis()
+            );
+
+            sendMessage(session, response);
+
+            log.info("💺 [좌석정보] 조회 완료 - 버스: {}, 사용중: {}/{}",
+                    busNumber, seatInfo.getOccupiedSeats(), seatInfo.getTotalSeats());
+
+        } catch (Exception e) {
+            log.error("❌ [좌석정보] 조회 중 오류", e);
+            sendErrorMessage(session, "좌석 정보 조회 중 오류가 발생했습니다: " + e.getMessage());
         }
     }
 
