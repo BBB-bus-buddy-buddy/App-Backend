@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -25,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 개선된 버스 기사 앱과의 WebSocket 통신 핸들러
+ * - WebSocket으로 받은 위치 정보를 BusService로 전달
+ * - BusService.flushLocationUpdates()가 주기적으로 DB에 반영
  * - 메모리 누수 방지
  * - 에러 처리 강화
  * - 하트비트 추가
@@ -41,10 +44,15 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     // 세션 관리를 위한 맵들 - 메모리 누수 방지를 위해 ConcurrentHashMap 사용
     private final Map<String, WebSocketSession> driverSessions = new ConcurrentHashMap<>();
     private final Map<String, String> sessionToBusMap = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionToOrganizationMap = new ConcurrentHashMap<>();
     private final Map<String, Instant> lastHeartbeatMap = new ConcurrentHashMap<>();
 
     // 하트비트 체크를 위한 스케줄러
     private final ScheduledExecutorService heartbeatScheduler = Executors.newScheduledThreadPool(2);
+
+    // 통계 정보
+    private long totalMessagesReceived = 0;
+    private long totalLocationUpdates = 0;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -71,13 +79,14 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String sessionId = session.getId();
         String busNumber = sessionToBusMap.remove(sessionId);
+        String organizationId = sessionToOrganizationMap.remove(sessionId);
         String clientIp = (String) session.getAttributes().get("CLIENT_IP");
 
         // 모든 맵에서 세션 정보 제거 (메모리 누수 방지)
         if (busNumber != null) {
             driverSessions.remove(busNumber);
-            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 버스 번호 = {}, 상태 = {}",
-                    sessionId, busNumber, status.getCode());
+            log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 버스 번호 = {}, 조직 = {}, 상태 = {}",
+                    sessionId, busNumber, organizationId, status.getCode());
         } else {
             log.info("버스 기사 WebSocket 연결 종료: 세션 ID = {}, 상태 = {}", sessionId, status.getCode());
         }
@@ -103,8 +112,10 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        log.debug("버스 기사로부터 메시지 수신: 세션 ID = {}, 메시지 길이 = {}",
-                session.getId(), payload.length());
+        totalMessagesReceived++;
+
+        log.debug("버스 기사로부터 메시지 수신: 세션 ID = {}, 메시지 길이 = {}, 총 수신 메시지 = {}",
+                session.getId(), payload.length(), totalMessagesReceived);
 
         try {
             // 메시지 타입 판별
@@ -137,15 +148,21 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * 위치 업데이트 처리 - BusService.updateBusLocation() 호출
+     * 이 메서드가 핵심입니다. WebSocket으로 받은 위치를 BusService로 전달합니다.
+     */
     private void handleLocationUpdate(WebSocketSession session, Map<String, Object> messageData) {
         try {
             // 데이터 추출 및 검증
             String busNumber = (String) messageData.get("busNumber");
             String organizationId = (String) messageData.get("organizationId");
-            Double latitude = ((Number) messageData.get("latitude")).doubleValue();
-            Double longitude = ((Number) messageData.get("longitude")).doubleValue();
-            Integer occupiedSeats = ((Number) messageData.get("occupiedSeats")).intValue();
-            Long timestamp = ((Number) messageData.get("timestamp")).longValue();
+
+            // 숫자 타입 안전하게 처리
+            Double latitude = getDoubleValue(messageData.get("latitude"));
+            Double longitude = getDoubleValue(messageData.get("longitude"));
+            Integer occupiedSeats = getIntegerValue(messageData.get("occupiedSeats"));
+            Long timestamp = getLongValue(messageData.get("timestamp"));
 
             // 기본 검증
             if (busNumber == null || organizationId == null ||
@@ -160,18 +177,28 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
 
             // DTO 생성
             BusRealTimeLocationDTO locationUpdate = new BusRealTimeLocationDTO(
-                    busNumber, organizationId, latitude, longitude, occupiedSeats, timestamp
+                    busNumber, organizationId, latitude, longitude, occupiedSeats,
+                    timestamp != null ? timestamp : System.currentTimeMillis()
             );
 
             // 세션 맵핑 등록 (처음 메시지를 보낼 때)
             if (!sessionToBusMap.containsKey(session.getId())) {
                 sessionToBusMap.put(session.getId(), busNumber);
+                sessionToOrganizationMap.put(session.getId(), organizationId);
                 driverSessions.put(busNumber, session);
-                log.info("버스 기사 세션 등록: 버스 번호 = {}, 세션 ID = {}", busNumber, session.getId());
+                log.info("버스 기사 세션 등록: 버스 번호 = {}, 조직 = {}, 세션 ID = {}",
+                        busNumber, organizationId, session.getId());
             }
 
-            // 위치 업데이트 처리 (비동기)
+            // BusService로 위치 업데이트 전달
+            // BusService.updateBusLocation()은 pendingLocationUpdates에 저장하고
+            // BusService.flushLocationUpdates()가 주기적으로 DB에 반영합니다
             busService.updateBusLocation(locationUpdate);
+
+            totalLocationUpdates++;
+
+            log.debug("위치 업데이트 처리 완료: 버스 = {}, 위치 = ({}, {}), 승객 = {}, 총 업데이트 = {}",
+                    busNumber, latitude, longitude, occupiedSeats, totalLocationUpdates);
 
             // 성공 응답
             sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
@@ -182,20 +209,28 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * 레거시 위치 업데이트 처리 (하위 호환성)
+     */
     private void handleLegacyLocationUpdate(WebSocketSession session, String payload) throws Exception {
         // 기존 로직 유지 (하위 호환성)
         BusRealTimeLocationDTO locationUpdate = objectMapper.readValue(payload, BusRealTimeLocationDTO.class);
         String busNumber = locationUpdate.getBusNumber();
+        String organizationId = locationUpdate.getOrganizationId();
 
         // 세션 맵핑 등록 (처음 메시지를 보낼 때)
         if (!sessionToBusMap.containsKey(session.getId())) {
             sessionToBusMap.put(session.getId(), busNumber);
+            sessionToOrganizationMap.put(session.getId(), organizationId);
             driverSessions.put(busNumber, session);
-            log.info("버스 기사 세션 등록: 버스 번호 = {}, 세션 ID = {}", busNumber, session.getId());
+            log.info("버스 기사 세션 등록 (레거시): 버스 번호 = {}, 조직 = {}, 세션 ID = {}",
+                    busNumber, organizationId, session.getId());
         }
 
-        // 위치 업데이트 처리
+        // BusService로 위치 업데이트 전달
         busService.updateBusLocation(locationUpdate);
+
+        totalLocationUpdates++;
 
         // 성공 응답
         sendSuccessMessage(session, "위치 업데이트가 성공적으로 처리되었습니다.");
@@ -271,6 +306,56 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         return new HashSet<>(driverSessions.keySet());
     }
 
+    /**
+     * 통계 정보 조회
+     */
+    public Map<String, Object> getStatistics() {
+        return Map.of(
+                "totalMessagesReceived", totalMessagesReceived,
+                "totalLocationUpdates", totalLocationUpdates,
+                "activeBusDrivers", getActiveBusDriverCount(),
+                "activeBuses", getActiveBusNumbers()
+        );
+    }
+
+    // 헬퍼 메서드들
+
+    private Double getDoubleValue(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer getIntegerValue(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Long getLongValue(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private void sendSuccessMessage(WebSocketSession session, String message) {
         try {
             Map<String, Object> response = Map.of(
@@ -312,6 +397,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     /**
      * 하트비트 체크 - 비활성 연결 감지 및 정리
      */
+    @Scheduled(fixedRate = 60000) // 1분마다 실행
     private void checkHeartbeats() {
         Instant threshold = Instant.now().minusSeconds(300); // 5분 임계값
 
@@ -345,6 +431,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
 
                 // 관련 맵에서도 제거
                 sessionToBusMap.values().removeIf(bn -> bn.equals(busNumber));
+                sessionToOrganizationMap.keySet().removeIf(sid ->
+                        busNumber.equals(sessionToBusMap.get(sid)));
                 lastHeartbeatMap.keySet().removeIf(sid ->
                         busNumber.equals(sessionToBusMap.get(sid)));
 
@@ -357,6 +445,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     /**
      * 오래된 세션들 정리 (가비지 컬렉션)
      */
+    @Scheduled(fixedRate = 300000) // 5분마다 실행
     private void cleanupStaleSessions() {
         int beforeSize = driverSessions.size();
         cleanupInvalidSessions();
@@ -365,6 +454,10 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
         if (beforeSize != afterSize) {
             log.info("세션 정리 완료: {} -> {} ({}개 정리)", beforeSize, afterSize, beforeSize - afterSize);
         }
+
+        // 통계 로그
+        log.info("WebSocket 통계 - 총 메시지: {}, 총 위치 업데이트: {}, 활성 버스: {}",
+                totalMessagesReceived, totalLocationUpdates, afterSize);
     }
 
     /**
@@ -375,6 +468,7 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             driverSessions.remove(busNumber);
         }
         sessionToBusMap.remove(sessionId);
+        sessionToOrganizationMap.remove(sessionId);
         lastHeartbeatMap.remove(sessionId);
     }
 
@@ -384,6 +478,8 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     @PreDestroy
     public void shutdown() {
         log.info("BusDriverWebSocketHandler 종료 중...");
+        log.info("최종 통계 - 총 메시지: {}, 총 위치 업데이트: {}",
+                totalMessagesReceived, totalLocationUpdates);
 
         // 모든 세션 정리
         driverSessions.values().forEach(session -> {
