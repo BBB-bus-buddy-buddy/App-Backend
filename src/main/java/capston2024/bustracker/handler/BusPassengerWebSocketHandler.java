@@ -409,25 +409,39 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
             sessionToUserMap.put(sessionId, userId);
             log.debug("💾 [승객WebSocket] 사용자 ID 저장: 세션 ID = {}, 사용자 ID = {}", sessionId, userId);
 
+            // ========================= [수정된 부분 시작] =========================
             log.info("🚀 [승객WebSocket] PassengerLocationService 호출 시작");
-            // 위치 처리 서비스 호출 (배터리 최적화 포함)
-            boolean boardingDetected = getPassengerLocationService().processPassengerLocation(locationDTO);
+            // 위치 처리 서비스 호출, 자동 탑승/하차 감지
+            PassengerLocationService.DetectionResult result = getPassengerLocationService().processPassengerLocation(locationDTO);
 
-            log.info("🎯 [승객WebSocket] 위치 처리 완료: 탑승 감지 = {}, 사용자 ID = {}",
-                    boardingDetected, userId);
+            log.info("🎯 [승객WebSocket] 위치 처리 완료: 감지 결과 = {}, 사용자 ID = {}",
+                    result, userId);
 
-            if (boardingDetected) {
-                log.info("🎉 [승객WebSocket] 자동 탑승/하차 감지됨! 사용자 ID = {}", userId);
-                // 자동 탑승 감지 시 클라이언트에 알림
-                sendSuccessMessage(session, "버스 탑승/하차가 자동으로 감지되었습니다.");
-            } else {
-                log.debug("📍 [승객WebSocket] 일반 위치 업데이트 처리됨: 사용자 ID = {}", userId);
-                // 일반적인 위치 업데이트 확인
-                sendMessage(session, Map.of(
-                        "type", "location_processed",
-                        "status", "success",
-                        "timestamp", System.currentTimeMillis()
-                ));
+            // 자동 탑승/하차 감지 결과에 따라 프론트엔드에 메시지 전송
+            switch (result) {
+                case BOARDED:
+                    PassengerLocationService.PassengerState state = getPassengerLocationService().getPassengerState(locationDTO.getUserId());
+                    String boardedBusNumber = state != null ? state.getCurrentBusNumber() : "정보 없음";
+                    log.info("🎉 [승객WebSocket] 자동 탑승 감지! 사용자 ID = {}, 버스 번호 = {}", userId, boardedBusNumber);
+                    // 구조화된 탑승 성공 메시지 전송
+                    sendMessage(session, Map.of(
+                            "type", "boarding_update",
+                            "status", "boarded",
+                            "data", Map.of("busNumber", boardedBusNumber)
+                    ));
+                    break;
+                case ALIGHTED:
+                    log.info("🎉 [승객WebSocket] 자동 하차 감지! 사용자 ID = {}", userId);
+                    // 구조화된 하차 성공 메시지 전송
+                    sendMessage(session, Map.of(
+                            "type", "boarding_update",
+                            "status", "alighted"
+                    ));
+                    break;
+                case NO_CHANGE:
+                    log.debug("📍 [승객WebSocket] 일반 위치 업데이트 처리됨 (상태 변화 없음): 사용자 ID = {}", userId);
+                    // 변화 없을 시에는 별도 메시지를 보내지 않아도 됨
+                    break;
             }
 
         } catch (Exception e) {
