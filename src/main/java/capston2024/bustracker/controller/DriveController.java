@@ -1,10 +1,6 @@
 package capston2024.bustracker.controller;
 
-import capston2024.bustracker.config.dto.ApiResponse;
-import capston2024.bustracker.config.dto.DriveStartRequestDTO;
-import capston2024.bustracker.config.dto.DriveEndRequestDTO;
-import capston2024.bustracker.config.dto.DriveLocationUpdateDTO;
-import capston2024.bustracker.config.dto.DriveStatusDTO;
+import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.UnauthorizedException;
 import capston2024.bustracker.service.AuthService;
@@ -128,48 +124,31 @@ public class DriveController {
 
     /**
      * 운행 중 위치 업데이트
+     * @deprecated WebSocket을 통한 실시간 위치 업데이트로 대체됨
+     *
+     * 이 엔드포인트는 더 이상 사용되지 않습니다.
+     * 운전자 앱은 WebSocket 연결을 통해 실시간으로 위치를 전송하며,
+     * BusService의 flushLocationUpdates()가 주기적으로 위치 정보를 DB에 반영합니다.
      */
+    @Deprecated
     @PostMapping("/location")
     @PreAuthorize("hasRole('DRIVER')")
-    @Operation(summary = "운행 중 위치 업데이트",
-            description = "운행 중인 버스의 위치 정보를 업데이트합니다.")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "위치 업데이트 성공",
-                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 데이터"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증되지 않은 사용자"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "권한 없음 (운전자 권한 필요)")
-    })
-    @SecurityRequirement(name = "Bearer Authentication")
+    @Operation(summary = "운행 중 위치 업데이트 (Deprecated)",
+            description = "이 API는 더 이상 사용되지 않습니다. WebSocket을 통한 실시간 위치 업데이트를 사용하세요.",
+            deprecated = true)
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateLocation(
             @Parameter(hidden = true) @AuthenticationPrincipal OAuth2User principal,
             @Parameter(description = "위치 업데이트 요청 데이터") @RequestBody DriveLocationUpdateDTO requestDTO) {
 
-        if (principal == null) {
-            throw new UnauthorizedException("인증된 사용자만 위치를 업데이트할 수 있습니다.");
-        }
+        log.warn("Deprecated API 호출 - /api/drives/location 대신 WebSocket을 사용하세요.");
 
-        Map<String, Object> userInfo = authService.getUserDetails(principal);
-        String driverId = (String) userInfo.get("email");
-        String organizationId = (String) userInfo.get("organizationId");
-        String role = (String) userInfo.get("role");
-
-        // 운전자 권한 확인
-        if (!"ROLE_DRIVER".equals(role)) {
-            throw new UnauthorizedException("운전자 권한이 필요합니다.");
-        }
-
-        if (organizationId == null || organizationId.isEmpty()) {
-            throw new BusinessException("조직에 속하지 않은 사용자는 위치를 업데이트할 수 없습니다.");
-        }
-
-        log.debug("위치 업데이트 요청 - 운전자: {}, 버스: {}, 위치: ({}, {})",
-                driverId, requestDTO.getBusNumber(),
-                requestDTO.getLocation().getLatitude(), requestDTO.getLocation().getLongitude());
-
-        Map<String, Object> result = driveService.updateLocation(requestDTO, driverId, organizationId);
-
-        return ResponseEntity.ok(new ApiResponse<>(result, "위치가 성공적으로 업데이트되었습니다."));
+        return ResponseEntity.ok(new ApiResponse<>(
+                Map.of(
+                        "warning", "이 API는 더 이상 사용되지 않습니다. WebSocket을 통한 실시간 위치 업데이트를 사용하세요.",
+                        "updated", false
+                ),
+                "WebSocket을 사용하세요."
+        ));
     }
 
     /**
