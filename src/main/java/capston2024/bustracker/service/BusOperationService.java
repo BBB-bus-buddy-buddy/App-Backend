@@ -4,15 +4,20 @@ package capston2024.bustracker.service;
 import capston2024.bustracker.config.dto.OperationPlanDTO;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.BusOperation;
+import capston2024.bustracker.domain.Route;
+import capston2024.bustracker.domain.Station;
 import capston2024.bustracker.domain.User;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.repository.BusOperationRepository;
 import capston2024.bustracker.repository.BusRepository;
+import capston2024.bustracker.repository.RouteRepository;
+import capston2024.bustracker.repository.StationRepository;
 import capston2024.bustracker.repository.UserRepository;
 import com.mongodb.DBRef;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +37,8 @@ public class BusOperationService {
     private final BusOperationRepository busOperationRepository;
     private final BusRepository busRepository;
     private final UserRepository userRepository;
-    private final RouteService routeService;
+    private final RouteRepository routeRepository;
+    private final StationRepository stationRepository;
 
     /**
      * 운행 일정 생성
@@ -153,8 +159,6 @@ public class BusOperationService {
                 .collect(Collectors.toList());
     }
 
-    // BusOperationService.java의 getOperationPlanDetail 메서드 수정
-
     /**
      * 특정 운행 일정 상세 조회
      * operationId 또는 id로 조회 가능하도록 수정
@@ -267,8 +271,12 @@ public class BusOperationService {
      */
     private void validateOperationPlan(OperationPlanDTO dto, String organizationId) {
         // 버스 존재 확인
-        Bus bus = busRepository.findByBusNumberAndOrganizationId(dto.getBusNumber(), organizationId)
+        Bus bus = busRepository.findById(dto.getBusId())
                 .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + dto.getBusId()));
+
+        if (!bus.getOrganizationId().equals(organizationId)) {
+            throw new BusinessException("다른 조직의 버스를 배정할 수 없습니다.");
+        }
 
         // 기사 존재 및 권한 확인
         User driver = userRepository.findById(dto.getDriverId())
@@ -302,9 +310,11 @@ public class BusOperationService {
     }
 
     /**
-     * Entity를 DTO로 변환
+     * Entity를 DTO로 변환 - 개선된 버전
      */
     private OperationPlanDTO convertToDTO(BusOperation operation) {
+        log.debug("운행 일정 DTO 변환 시작 - ID: {}", operation.getId());
+
         OperationPlanDTO dto = OperationPlanDTO.builder()
                 .id(operation.getId())
                 .operationId(operation.getOperationId())
@@ -323,22 +333,44 @@ public class BusOperationService {
         if (operation.getBusId() != null) {
             String busId = operation.getBusId().getId().toString();
             dto.setBusId(busId);
+            log.debug("버스 ID: {}", busId);
 
-            busRepository.findById(busId).ifPresent(bus -> {
-                dto.setBusNumber(bus.getBusNumber());
-                dto.setBusRealNumber(bus.getBusRealNumber());
+            try {
+                Bus bus = busRepository.findById(busId).orElse(null);
+                if (bus != null) {
+                    dto.setBusNumber(bus.getBusNumber());
+                    dto.setBusRealNumber(bus.getBusRealNumber());
+                    log.debug("버스 번호: {}, 실제 번호: {}", bus.getBusNumber(), bus.getBusRealNumber());
 
-                // 라우트 정보 조회
-                if (bus.getRouteId() != null) {
-                    String routeId = bus.getRouteId().getId().toString();
-                    dto.setRouteId(routeId);
-                    try {
-                        dto.setRouteName(routeService.getRouteById(routeId, operation.getOrganizationId()).getRouteName());
-                    } catch (Exception e) {
-                        log.warn("라우트 정보 조회 실패: {}", e.getMessage());
+                    // 라우트 정보 조회
+                    if (bus.getRouteId() != null) {
+                        String routeId = bus.getRouteId().getId().toString();
+                        dto.setRouteId(routeId);
+                        log.debug("라우트 ID: {}", routeId);
+
+                        try {
+                            Route route = routeRepository.findById(routeId).orElse(null);
+                            if (route != null) {
+                                dto.setRouteName(route.getRouteName());
+                                log.debug("라우트 이름: {}", route.getRouteName());
+
+                                // 출발지/도착지 정보 설정 - 개선된 버전
+                                setStartEndLocations(dto, route);
+                            } else {
+                                log.warn("라우트를 찾을 수 없음: {}", routeId);
+                            }
+                        } catch (Exception e) {
+                            log.error("라우트 정보 조회 실패: {}", e.getMessage(), e);
+                        }
+                    } else {
+                        log.warn("버스에 라우트 ID가 없음: 버스 번호 {}", bus.getBusNumber());
                     }
+                } else {
+                    log.warn("버스를 찾을 수 없음: {}", busId);
                 }
-            });
+            } catch (Exception e) {
+                log.error("버스 정보 조회 실패: {}", e.getMessage(), e);
+            }
         }
 
         // 기사 정보 조회
@@ -348,10 +380,83 @@ public class BusOperationService {
 
             userRepository.findById(driverId).ifPresent(driver -> {
                 dto.setDriverName(driver.getName());
+                log.debug("운전자 이름: {}", driver.getName());
             });
         }
 
+        log.debug("운행 일정 DTO 변환 완료 - startLocation: {}, endLocation: {}",
+                dto.getStartLocation(), dto.getEndLocation());
+
         return dto;
+    }
+
+    /**
+     * 라우트의 첫 번째와 마지막 정류장을 출발지/도착지로 설정 - 개선된 버전
+     */
+    private void setStartEndLocations(OperationPlanDTO dto, Route route) {
+        if (route.getStations() == null || route.getStations().isEmpty()) {
+            log.warn("라우트에 정류장이 없음: {}", route.getId());
+            return;
+        }
+
+        log.debug("정류장 개수: {}", route.getStations().size());
+
+        try {
+            // 출발지 (첫 번째 정류장)
+            Route.RouteStation firstRouteStation = route.getStations().get(0);
+            if (firstRouteStation != null && firstRouteStation.getStationId() != null) {
+                String firstStationId = firstRouteStation.getStationId().getId().toString();
+                log.debug("첫 번째 정류장 ID: {}", firstStationId);
+
+                Station firstStation = stationRepository.findById(firstStationId).orElse(null);
+                if (firstStation != null) {
+                    GeoJsonPoint location = firstStation.getLocation();
+
+                    OperationPlanDTO.LocationInfo startLocation = OperationPlanDTO.LocationInfo.builder()
+                            .name(firstStation.getName())
+                            .latitude(location != null ? location.getY() : null)
+                            .longitude(location != null ? location.getX() : null)
+                            .build();
+
+                    dto.setStartLocation(startLocation);
+                    log.info("출발지 설정 성공: {} ({}, {})",
+                            startLocation.getName(),
+                            startLocation.getLatitude(),
+                            startLocation.getLongitude());
+                } else {
+                    log.error("첫 번째 정류장을 찾을 수 없음: {}", firstStationId);
+                }
+            }
+
+            // 도착지 (마지막 정류장)
+            int lastIndex = route.getStations().size() - 1;
+            Route.RouteStation lastRouteStation = route.getStations().get(lastIndex);
+            if (lastRouteStation != null && lastRouteStation.getStationId() != null) {
+                String lastStationId = lastRouteStation.getStationId().getId().toString();
+                log.debug("마지막 정류장 ID: {}", lastStationId);
+
+                Station lastStation = stationRepository.findById(lastStationId).orElse(null);
+                if (lastStation != null) {
+                    GeoJsonPoint location = lastStation.getLocation();
+
+                    OperationPlanDTO.LocationInfo endLocation = OperationPlanDTO.LocationInfo.builder()
+                            .name(lastStation.getName())
+                            .latitude(location != null ? location.getY() : null)
+                            .longitude(location != null ? location.getX() : null)
+                            .build();
+
+                    dto.setEndLocation(endLocation);
+                    log.info("도착지 설정 성공: {} ({}, {})",
+                            endLocation.getName(),
+                            endLocation.getLatitude(),
+                            endLocation.getLongitude());
+                } else {
+                    log.error("마지막 정류장을 찾을 수 없음: {}", lastStationId);
+                }
+            }
+        } catch (Exception e) {
+            log.error("출발지/도착지 설정 중 오류 발생: {}", e.getMessage(), e);
+        }
     }
 
     /**
