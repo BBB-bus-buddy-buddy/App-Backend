@@ -1,10 +1,6 @@
 package capston2024.bustracker.service;
 
-import capston2024.bustracker.config.dto.BusRealTimeLocationDTO;
-import capston2024.bustracker.config.dto.DriveStartRequestDTO;
-import capston2024.bustracker.config.dto.DriveEndRequestDTO;
-import capston2024.bustracker.config.dto.DriveLocationUpdateDTO;
-import capston2024.bustracker.config.dto.DriveStatusDTO;
+import capston2024.bustracker.config.dto.*;
 import capston2024.bustracker.domain.Bus;
 import capston2024.bustracker.domain.BusOperation;
 import capston2024.bustracker.domain.Route;
@@ -39,7 +35,6 @@ public class DriveService {
     private final StationRepository stationRepository;
     private final UserRepository userRepository;
     private final BusService busService;
-    private final KakaoApiService kakaoApiService;
 
     // 운행 상태 상수 - 프론트엔드 DRIVE_STATUS와 매칭
     public static final String DRIVE_STATUS_SCHEDULED = "SCHEDULED";      // 예정됨
@@ -233,79 +228,22 @@ public class DriveService {
 
     /**
      * 운행 중 위치 업데이트
+     * @deprecated WebSocket을 통한 실시간 위치 업데이트로 대체됨
+     *
+     * 위치 업데이트는 이제 다음과 같이 처리됩니다:
+     * 1. 운전자 앱에서 WebSocket으로 위치 정보 전송
+     * 2. BusDriverWebSocketHandler가 메시지 수신
+     * 3. BusService.updateBusLocation()으로 pendingLocationUpdates에 저장
+     * 4. BusService.flushLocationUpdates()가 주기적으로(10초마다) DB에 반영
      */
-    @Transactional
+    @Deprecated
     public Map<String, Object> updateLocation(DriveLocationUpdateDTO requestDTO, String driverEmail, String organizationId) {
-        try {
-            log.debug("위치 업데이트 처리 - 운행ID: {}, 버스: {}", requestDTO.getOperationId(), requestDTO.getBusNumber());
+        log.warn("Deprecated 메서드 호출 - updateLocation은 더 이상 사용되지 않습니다. WebSocket을 사용하세요.");
 
-            // 1. 운행 일정 조회 - 먼저 operationId로 시도, 실패하면 _id로 시도
-            BusOperation operation = busOperationRepository
-                    .findByOperationIdAndOrganizationId(requestDTO.getOperationId(), organizationId)
-                    .orElseGet(() -> {
-                        return busOperationRepository
-                                .findByIdAndOrganizationId(requestDTO.getOperationId(), organizationId)
-                                .orElseThrow(() -> new ResourceNotFoundException("운행 일정을 찾을 수 없습니다: " + requestDTO.getOperationId()));
-                    });
-
-            // 2. 운행 상태 확인
-            if (!DRIVE_STATUS_IN_PROGRESS.equals(operation.getStatus())) {
-                throw new BusinessException("진행 중인 운행이 아닙니다. 현재 상태: " + operation.getStatus());
-            }
-
-            // 3. DBRef 유효성 검증
-            if (operation.getBusId() == null || operation.getBusId().getId() == null) {
-                throw new BusinessException("운행 일정에 버스 정보가 없습니다.");
-            }
-
-            // 4. 버스 정보 조회
-            String busId = operation.getBusId().getId().toString();
-            Bus bus = busRepository.findById(busId)
-                    .orElseThrow(() -> new ResourceNotFoundException("버스를 찾을 수 없습니다: " + busId));
-
-            // 5. 버스 번호 확인
-            if (!bus.getBusNumber().equals(requestDTO.getBusNumber())) {
-                throw new BusinessException("운행 일정의 버스 번호와 일치하지 않습니다.");
-            }
-
-            // 6. BusService를 통해 위치 업데이트 (BusRealTimeLocationDTO로 변환)
-            BusRealTimeLocationDTO busLocationDTO = new BusRealTimeLocationDTO(
-                    requestDTO.getBusNumber(),
-                    organizationId,
-                    requestDTO.getLocation().getLatitude(),
-                    requestDTO.getLocation().getLongitude(),
-                    bus.getOccupiedSeats(),
-                    requestDTO.getLocation().getTimestamp()
-            );
-
-            busService.updateBusLocation(busLocationDTO);
-
-            // 7. 다음 정류장 정보 조회
-            Map<String, Object> nextStopInfo = getNextStopInfo(bus);
-
-            // 8. 응답 데이터 구성
-            Map<String, Object> response = new HashMap<>();
-            response.put("updated", true);
-            response.put("busNumber", bus.getBusNumber());
-            response.put("currentLocation", Map.of(
-                    "latitude", requestDTO.getLocation().getLatitude(),
-                    "longitude", requestDTO.getLocation().getLongitude()
-            ));
-
-            if (nextStopInfo != null) {
-                response.put("nextStop", nextStopInfo);
-            }
-
-            // 목적지 근처 도착 여부 확인
-            boolean isNearDestination = checkNearDestination(bus, requestDTO.getLocation());
-            response.put("isNearDestination", isNearDestination);
-
-            return response;
-
-        } catch (Exception e) {
-            log.error("위치 업데이트 중 오류 발생: {}", e.getMessage(), e);
-            throw e;
-        }
+        Map<String, Object> response = new HashMap<>();
+        response.put("updated", false);
+        response.put("warning", "이 메서드는 더 이상 사용되지 않습니다. WebSocket을 통한 실시간 위치 업데이트를 사용하세요.");
+        return response;
     }
 
     /**
@@ -520,115 +458,6 @@ public class DriveService {
         } catch (Exception e) {
             log.error("출발지 위치 검증 중 예외 발생: {}", e.getMessage(), e);
             // 다른 예외는 로그만 남기고 진행
-        }
-    }
-
-    /**
-     * 다음 정류장 정보 조회
-     */
-    private Map<String, Object> getNextStopInfo(Bus bus) {
-        try {
-            if (bus.getRouteId() == null || bus.getRouteId().getId() == null) {
-                return null;
-            }
-
-            String routeId = bus.getRouteId().getId().toString();
-            Route route = routeRepository.findById(routeId).orElse(null);
-
-            if (route == null || route.getStations() == null || route.getStations().isEmpty()) {
-                return null;
-            }
-
-            // 현재 정류장 인덱스 다음 정류장 찾기
-            int nextIdx = bus.getPrevStationIdx() + 1;
-            if (nextIdx >= route.getStations().size()) {
-                // 마지막 정류장에 도달
-                return Map.of(
-                        "name", "종점",
-                        "isLastStop", true
-                );
-            }
-
-            Route.RouteStation nextRouteStation = route.getStations().get(nextIdx);
-            if (nextRouteStation.getStationId() == null || nextRouteStation.getStationId().getId() == null) {
-                return null;
-            }
-
-            String nextStationId = nextRouteStation.getStationId().getId().toString();
-            Station nextStation = stationRepository.findById(nextStationId).orElse(null);
-
-            if (nextStation == null) {
-                return null;
-            }
-
-            // 다음 정류장까지 예상 시간 계산 (KakaoApiService 사용)
-            Map<String, Object> stopInfo = new HashMap<>();
-            stopInfo.put("name", nextStation.getName());
-            stopInfo.put("sequence", nextIdx + 1);
-            stopInfo.put("totalStops", route.getStations().size());
-            stopInfo.put("isLastStop", nextIdx == route.getStations().size() - 1);
-
-            try {
-                String estimatedTime = kakaoApiService.getMultiWaysTimeEstimate(
-                        bus.getBusNumber(),
-                        nextStationId
-                ).getEstimatedTime();
-                stopInfo.put("estimatedTime", estimatedTime);
-            } catch (Exception e) {
-                log.warn("다음 정류장 도착 시간 예측 실패: {}", e.getMessage());
-                stopInfo.put("estimatedTime", "계산 중...");
-            }
-
-            return stopInfo;
-
-        } catch (Exception e) {
-            log.error("다음 정류장 정보 조회 중 오류: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * 목적지 근처 도착 여부 확인
-     */
-    private boolean checkNearDestination(Bus bus, DriveLocationUpdateDTO.LocationInfo currentLocation) {
-        try {
-            if (bus.getRouteId() == null || bus.getRouteId().getId() == null) {
-                return false;
-            }
-
-            String routeId = bus.getRouteId().getId().toString();
-            Route route = routeRepository.findById(routeId).orElse(null);
-
-            if (route == null || route.getStations() == null || route.getStations().isEmpty()) {
-                return false;
-            }
-
-            // 마지막 정류장이 도착지
-            int lastIdx = route.getStations().size() - 1;
-            Route.RouteStation lastRouteStation = route.getStations().get(lastIdx);
-
-            if (lastRouteStation.getStationId() == null || lastRouteStation.getStationId().getId() == null) {
-                return false;
-            }
-
-            String lastStationId = lastRouteStation.getStationId().getId().toString();
-            Station endStation = stationRepository.findById(lastStationId).orElse(null);
-
-            if (endStation == null || endStation.getLocation() == null) {
-                return false;
-            }
-
-            double distance = busService.calculateDistance(
-                    currentLocation.getLatitude(), currentLocation.getLongitude(),
-                    endStation.getLocation().getY(), endStation.getLocation().getX()
-            );
-
-            // 도착지 100m 이내면 true
-            return distance <= 100.0;
-
-        } catch (Exception e) {
-            log.error("목적지 도착 확인 중 오류: {}", e.getMessage());
-            return false;
         }
     }
 

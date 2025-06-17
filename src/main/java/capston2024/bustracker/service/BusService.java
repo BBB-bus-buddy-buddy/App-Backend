@@ -548,11 +548,13 @@ public class BusService {
 
     /**
      * 정기적으로 버스 위치 업데이트 적용 (10초마다)
+     * WebSocket으로 받은 위치 정보를 DB에 반영하는 핵심 메서드
      */
     @Scheduled(fixedRate = 10000)
     public void flushLocationUpdates() {
         List<BusRealTimeLocationDTO> updates;
 
+        // 1. 대기 중인 업데이트 가져오기
         synchronized (pendingLocationUpdates) {
             if (pendingLocationUpdates.isEmpty()) {
                 return;
@@ -562,8 +564,16 @@ public class BusService {
             pendingLocationUpdates.clear();
         }
 
+        log.info("[BusService] 위치 업데이트 처리 시작 - {} 건", updates.size());
+
+        int successCount = 0;
+        int failCount = 0;
+        long startTime = System.currentTimeMillis();
+
+        // 2. 각 버스의 위치 업데이트 처리
         for (BusRealTimeLocationDTO update : updates) {
             try {
+                // 버스 조회
                 Query query = new Query(Criteria.where("busNumber").is(update.getBusNumber())
                         .and("organizationId").is(update.getOrganizationId()));
 
@@ -572,16 +582,18 @@ public class BusService {
                 if (existingBus == null) {
                     log.warn("위치 업데이트 실패: 버스를 찾을 수 없음: {}, 조직: {}",
                             update.getBusNumber(), update.getOrganizationId());
+                    failCount++;
                     continue;
                 }
 
                 // 운행 중지된 버스인 경우 위치 업데이트 건너뛰기
                 if (!existingBus.isOperate()) {
                     log.debug("운행 중지된 버스 위치 업데이트 건너뛰기: {}", update.getBusNumber());
+                    failCount++;
                     continue;
                 }
 
-                // 위치 및 좌석 업데이트
+                // 위치 및 좌석 정보 업데이트
                 GeoJsonPoint newLocation = new GeoJsonPoint(update.getLongitude(), update.getLatitude());
                 Instant timestamp = Instant.ofEpochMilli(update.getTimestamp());
 
@@ -603,31 +615,91 @@ public class BusService {
                             .set("lastStationTime", timestamp)
                             .set("prevStationIdx", nearestStation.getSequence());
 
-                    log.info("버스 {} 정류장 업데이트: 시퀀스={}", update.getBusNumber(), nearestStation.getSequence());
+                    log.info("버스 {} 정류장 업데이트: 시퀀스={}, 정류장ID={}",
+                            update.getBusNumber(), nearestStation.getSequence(),
+                            nearestStation.getStationId().getId());
                 }
 
+                // MongoDB 업데이트 실행
                 mongoOperations.updateFirst(query, mongoUpdate, Bus.class);
+                successCount++;
 
-                // 업데이트 후 버스 정보 조회
+                // 3. 업데이트된 버스 정보 조회 및 이벤트 발생
                 Bus updatedBus = mongoOperations.findOne(query, Bus.class);
-
-                // 클라이언트에게 상태 업데이트 브로드캐스트
                 if (updatedBus != null) {
+                    // 클라이언트에게 상태 업데이트 브로드캐스트
                     broadcastBusStatusUpdate(updatedBus);
+
+                    // 정류장 도착/출발 이벤트 처리
+                    if (nearestStation != null && existingBus.getPrevStationIdx() != nearestStation.getSequence()) {
+                        publishStationEvent(updatedBus, nearestStation);
+                    }
                 }
 
             } catch (Exception e) {
                 log.error("버스 {} 위치 업데이트 중 오류 발생", update.getBusNumber(), e);
+                failCount++;
             }
         }
 
-        if (!updates.isEmpty()) {
-            log.info("{} 개의 버스 위치 정보가 업데이트되었습니다.", updates.size());
+        long elapsedTime = System.currentTimeMillis() - startTime;
+
+        log.info("[BusService] 위치 업데이트 처리 완료 - 성공: {} 건, 실패: {} 건, 소요 시간: {} ms",
+                successCount, failCount, elapsedTime);
+
+        // 4. 성능 모니터링
+        if (elapsedTime > 5000) { // 5초 이상 걸린 경우 경고
+            log.warn("[BusService] 위치 업데이트 처리 시간이 길어졌습니다: {} ms", elapsedTime);
         }
     }
 
     /**
-     * 현재 위치에서 가장 가까운 정류장 찾기
+     * 정류장 이벤트 발행
+     */
+    private void publishStationEvent(Bus bus, Route.RouteStation station) {
+        try {
+            String stationId = station.getStationId().getId().toString();
+            Station stationInfo = stationRepository.findById(stationId).orElse(null);
+
+            if (stationInfo != null) {
+                Map<String, Object> eventData = Map.of(
+                        "busNumber", bus.getBusNumber(),
+                        "busRealNumber", bus.getBusRealNumber() != null ? bus.getBusRealNumber() : "",
+                        "stationName", stationInfo.getName(),
+                        "stationSequence", station.getSequence(),
+                        "timestamp", bus.getTimestamp().toEpochMilli(),
+                        "occupiedSeats", bus.getOccupiedSeats(),
+                        "availableSeats", bus.getAvailableSeats()
+                );
+
+                // 정류장 도착 이벤트 발행
+                eventPublisher.publishEvent(new StationArrivalEvent(
+                        bus.getOrganizationId(),
+                        bus.getBusNumber(),
+                        stationInfo.getName(),
+                        eventData
+                ));
+
+                log.info("정류장 도착 이벤트 발행 - 버스: {}, 정류장: {} ({}번째)",
+                        bus.getBusNumber(), stationInfo.getName(), station.getSequence());
+            }
+        } catch (Exception e) {
+            log.error("정류장 이벤트 발행 중 오류: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 정류장 도착 이벤트 클래스
+     */
+    public record StationArrivalEvent(
+            String organizationId,
+            String busNumber,
+            String stationName,
+            Map<String, Object> eventData
+    ) {}
+
+    /**
+     * 현재 위치에서 가장 가까운 정류장 찾기 (개선된 버전)
      */
     private Route.RouteStation findNearestStation(Bus bus, GeoJsonPoint location) {
         if (bus.getRouteId() == null) {
@@ -644,8 +716,9 @@ public class BusService {
         double minDistance = STATION_RADIUS;
 
         // 현재 인덱스 기준 주변 정류장 탐색 (전체 노선 탐색보다 효율적)
-        int startIdx = Math.max(0, bus.getPrevStationIdx() - 1);
-        int endIdx = Math.min(route.getStations().size(), bus.getPrevStationIdx() + 3);
+        int currentIdx = bus.getPrevStationIdx();
+        int startIdx = Math.max(0, currentIdx - 1);
+        int endIdx = Math.min(route.getStations().size(), currentIdx + 3);
 
         for (int i = startIdx; i < endIdx; i++) {
             if (i >= route.getStations().size()) break;
@@ -661,7 +734,8 @@ public class BusService {
                             station.getLocation().getY(), station.getLocation().getX()
                     );
 
-                    if (distance < minDistance) {
+                    // 이전 정류장보다 뒤에 있는 정류장만 고려 (역주행 방지)
+                    if (distance < minDistance && i >= currentIdx) {
                         minDistance = distance;
                         nearestStation = routeStation;
                     }
@@ -671,7 +745,33 @@ public class BusService {
             }
         }
 
+        // 근처에 정류장이 없고 현재 위치가 마지막 정류장을 지났다면
+        if (nearestStation == null && currentIdx == route.getStations().size() - 1) {
+            log.debug("버스 {}가 종점에 도착했거나 지나쳤습니다.", bus.getBusNumber());
+        }
+
         return nearestStation;
+    }
+
+    /**
+     * 대기 중인 위치 업데이트 수 조회
+     */
+    public int getPendingLocationUpdatesCount() {
+        return pendingLocationUpdates.size();
+    }
+
+    /**
+     * WebSocket 연결 상태 확인을 위한 메서드
+     */
+    public Map<String, Object> getWebSocketStatus() {
+        BusDriverWebSocketHandler handler = applicationContext.getBean(BusDriverWebSocketHandler.class);
+
+        return Map.of(
+                "activeBusDrivers", handler.getActiveBusDriverCount(),
+                "activeBuses", handler.getActiveBusNumbers(),
+                "pendingUpdates", getPendingLocationUpdatesCount(),
+                "statistics", handler.getStatistics()
+        );
     }
 
     /**
