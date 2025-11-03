@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BusBuddyBuddy 시스템 아키텍처</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            height: 100%;
+            max-width: 1400px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        /* Main content area */
+        .content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 3fr 1fr;
+            gap: 15px;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        /* Left sidebar - Key Features */
+        .sidebar-left {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .feature-box {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .feature-box h3 {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-box ul {
+            list-style: none;
+            padding: 0;
+            font-size: 0.9em;
+        }
+
+        .feature-box li {
+            padding: 3px 0;
+            padding-left: 15px;
+            position: relative;
+        }
+
+        .feature-box li::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        /* Center - Main Architecture Flow */
+        .main-flow {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .layer {
+            background: white;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .layer:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .layer-icon {
+            font-size: 2em;
+            flex-shrink: 0;
+        }
+
+        .layer-content {
+            flex: 1;
+        }
+
+        .layer-title {
+            font-weight: 700;
+            font-size: 1em;
+            margin-bottom: 3px;
+            color: #1e293b;
+        }
+
+        .layer-desc {
+            font-size: 0.75em;
+            color: #64748b;
+            line-height: 1.3;
+        }
+
+        .tech-tags {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-top: 5px;
+        }
+
+        .tag {
+            background: #e2e8f0;
+            color: #475569;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: 600;
+        }
+
+        /* Color coding for layers */
+        .layer-mobile { border-left: 5px solid #667eea; }
+        .layer-gateway { border-left: 5px solid #f5576c; }
+        .layer-security { border-left: 5px solid #4facfe; }
+        .layer-backend { border-left: 5px solid #fa709a; }
+        .layer-data { border-left: 5px solid #30cfd0; }
+        .layer-websocket { border-left: 5px solid #ffecd2; background: #fffbf5; }
+        .layer-external { border-left: 5px solid #a1c4fd; }
+
+        /* Arrows */
+        .arrow {
+            text-align: center;
+            font-size: 1.5em;
+            color: #2563eb;
+            height: 8px;
+            line-height: 8px;
+        }
+
+        .arrow-bi {
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        /* Right sidebar - Stats & DevOps */
+        .sidebar-right {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .devops-box {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            color: #1e293b;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .devops-box h3 {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .devops-box ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .devops-box li {
+            padding: 2px 0;
+            font-size: 0.85em;
+        }
+
+        /* Footer */
+        footer {
+            background: #f8fafc;
+            padding: 12px 30px;
+            text-align: center;
+            font-size: 0.75em;
+            color: #64748b;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                border-radius: 0;
+                max-width: 100%;
+                height: 100vh;
+            }
+
+            .layer:hover {
+                transform: none;
+            }
+
+            @page {
+                size: A4 landscape;
+                margin: 1cm;
+            }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .content {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr auto;
+            }
+
+            .sidebar-left, .sidebar-right {
+                flex-direction: row;
+                overflow-x: auto;
+            }
+
+            .feature-box, .stat-card, .devops-box {
+                min-width: 200px;
+            }
+        }
+
+        /* WebSocket highlight */
+        .ws-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #10b981;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🚌 BusBuddyBuddy 시스템 아키텍처</h1>
+            <p class="subtitle">실시간 버스 위치 추적 시스템 | Spring Boot 3.3.1 + React Native 0.78 + MongoDB</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Left Sidebar: Key Features -->
+            <div class="sidebar-left">
+                <div class="feature-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <h3>⚡ 핵심 기능</h3>
+                    <ul>
+                        <li>실시간 위치 추적 (500ms)</li>
+                        <li>양방향 WebSocket 통신</li>
+                        <li>OAuth2 + JWT 보안</li>
+                        <li>멀티 플랫폼 (iOS/Android)</li>
+                        <li>조직별 데이터 격리</li>
+                    </ul>
+                </div>
+
+                <div class="feature-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <h3>🔐 보안 체계</h3>
+                    <ul>
+                        <li>Google OAuth2 소셜 로그인</li>
+                        <li>JWT 토큰 (HS256, 7일)</li>
+                        <li>역할 기반 접근제어 (RBAC)</li>
+                        <li>Spring Security 필터 체인</li>
+                        <li>대학교 이메일 인증</li>
+                    </ul>
+                </div>
+
+                <div class="feature-box" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    <h3>📊 시스템 규모</h3>
+                    <ul>
+                        <li>13개 API 컨트롤러</li>
+                        <li>14개 서비스 레이어</li>
+                        <li>8개 MongoDB Repository</li>
+                        <li>30+ REST API 엔드포인트</li>
+                        <li>WebSocket 양방향 통신</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Center: Main Architecture Flow -->
+            <div class="main-flow">
+                <!-- Mobile Apps -->
+                <div class="layer layer-mobile">
+                    <div class="layer-icon">📱</div>
+                    <div class="layer-content">
+                        <div class="layer-title">모바일 애플리케이션 (iOS & Android)</div>
+                        <div class="layer-desc">React Native 0.78 • TypeScript 5.0.4 • Zustand 상태관리 • Naver Map SDK</div>
+                        <div class="tech-tags">
+                            <span class="tag">Axios</span>
+                            <span class="tag">WebSocket</span>
+                            <span class="tag">AsyncStorage</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- API Gateway -->
+                <div class="layer layer-gateway">
+                    <div class="layer-icon">🌐</div>
+                    <div class="layer-content">
+                        <div class="layer-title">API Gateway (http://devse.kr:포트(비공개))</div>
+                        <div class="layer-desc">REST API 엔드포인트 • WebSocket 연결 • HTTPS/SSL • CORS 설정</div>
+                        <div class="tech-tags">
+                            <span class="tag">Load Balancer</span>
+                            <span class="tag">Rate Limiting</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Security Layer -->
+                <div class="layer layer-security">
+                    <div class="layer-icon">🛡️</div>
+                    <div class="layer-content">
+                        <div class="layer-title">보안 레이어 (OAuth2 + JWT)</div>
+                        <div class="layer-desc">Google OAuth2 Provider → JWT 토큰 발급 → Spring Security 필터 체인 → 권한 검증</div>
+                        <div class="tech-tags">
+                            <span class="tag">USER</span>
+                            <span class="tag">DRIVER</span>
+                            <span class="tag">STAFF</span>
+                            <span class="tag">ADMIN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Backend (Combined Controller + Service) -->
+                <div class="layer layer-backend">
+                    <div class="layer-icon">⚙️</div>
+                    <div class="layer-content">
+                        <div class="layer-title">백엔드 서버 (Spring Boot 3.3.1 • Java 21)</div>
+                        <div class="layer-desc">
+                            <strong>Controller:</strong> Auth, Bus, Route, Station, Driver, Organization (13개) →
+                            <strong>Service:</strong> 비즈니스 로직, 검증, 트랜잭션 (14개)
+                        </div>
+                        <div class="tech-tags">
+                            <span class="tag">Spring Security</span>
+                            <span class="tag">Swagger API</span>
+                            <span class="tag">Lombok</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- Data Layer (Repository + Database) -->
+                <div class="layer layer-data">
+                    <div class="layer-icon">💾</div>
+                    <div class="layer-content">
+                        <div class="layer-title">데이터 레이어 (MongoDB Reactive)</div>
+                        <div class="layer-desc">
+                            <strong>Repository (8개):</strong> Bus, Route, Station, User, Driver, Organization, BusOperation, Token →
+                            <strong>DB:</strong> Replica Set (Primary + 2 Secondary)
+                        </div>
+                        <div class="tech-tags">
+                            <span class="tag">GeoSpatial Index</span>
+                            <span class="tag">BSON</span>
+                            <span class="tag">Reactive Driver</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow arrow-bi">⇅</div>
+
+                <!-- WebSocket Real-time Communication -->
+                <div class="layer layer-websocket">
+                    <span class="ws-badge">실시간</span>
+                    <div class="layer-icon">⚡</div>
+                    <div class="layer-content">
+                        <div class="layer-title">양방향 WebSocket 통신 (500ms 이내)</div>
+                        <div class="layer-desc">
+                            <strong>Driver:</strong> GPS 위치 전송 (5초 주기) →
+                            <strong>Server:</strong> BusDriverWSHandler + EventListener →
+                            <strong>Passenger:</strong> BusPassengerWSHandler → 실시간 위치/ETA 수신
+                        </div>
+                        <div class="tech-tags">
+                            <span class="tag">Spring WebFlux</span>
+                            <span class="tag">Event-Driven</span>
+                            <span class="tag">Broadcasting</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <!-- External Services -->
+                <div class="layer layer-external">
+                    <div class="layer-icon">🌍</div>
+                    <div class="layer-content">
+                        <div class="layer-title">외부 서비스 통합</div>
+                        <div class="layer-desc">Google OAuth2 (소셜 로그인) • Naver Map API (지도 표시) • Kakao Mobility API (실시간 거리 기반 시간 계산 로직)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar: Stats & DevOps -->
+            <div class="sidebar-right">
+                <div class="stat-card">
+                    <div class="stat-number">500ms</div>
+                    <div class="stat-label">실시간 통신<br>지연 시간</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-number">30+</div>
+                    <div class="stat-label">REST API<br>엔드포인트</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">WebSocket<br>핸들러</div>
+                </div>
+
+                <div class="devops-box">
+                    <h3>🚀 DevOps & 배포</h3>
+                    <ul>
+                        <li><strong>컨테이너:</strong> Docker</li>
+                        <li><strong>오케스트레이션:</strong> 3개 인스턴스</li>
+                        <li><strong>DB:</strong> MongoDB Replica Set</li>
+                        <li><strong>CI/CD:</strong> GitHub Actions</li>
+                        <li><strong>모니터링:</strong> Actuator + Grafana</li>
+                        <li><strong>로깅:</strong> SLF4J + Logback</li>
+                    </ul>
+                </div>
+
+                <div class="devops-box" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+                    <h3>📦 배포 환경</h3>
+                    <ul>
+                        <li><strong>Dev:</strong> localhost:27017</li>
+                        <li><strong>Prod:</strong> Cluster URI</li>
+                        <li><strong>Load Balancer:</strong> Nginx</li>
+                        <li><strong>SSL/TLS:</strong> HTTPS</li>
+                        <li><strong>Auto Scaling:</strong> K8s 지원</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <strong>데이터 흐름:</strong> Mobile App → API Gateway → Security Filter → Controller → Service → Repository → MongoDB ⇄ WebSocket (실시간) |
+            <strong>인증:</strong> OAuth2 → JWT (7일) → AsyncStorage |
+            <strong>기술 스택:</strong> Spring Boot 3.3.1 + React Native 0.78 + MongoDB + WebSocket
+        </footer>
+    </div>
+</body>
+</html>
