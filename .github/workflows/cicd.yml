@@ -7,57 +7,42 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      # 1) QEMU 세팅 (멀티아치 빌드 필요)
+      # ⬇️ 멀티아치 에뮬레이터 추가 (필수)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 2) Buildx 세팅
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3) Docker Hub 로그인
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # (선택) 이미지 메타데이터 자동 생성(버전/라벨 등)
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: taehun2/bbb
-          tags: |
-            type=raw,value=${{ github.ref_name }}   # e.g. "release"
-            type=raw,value=latest                   # 필요 시 latest도 함께 푸시
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-
-      # 4) 멀티아치 빌드 & 푸시 (buildx)
-      - name: Build and push Docker image (multi-arch)
+      # ⬇️ 여기만 멀티아치로!
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64         # 👈 핵심
-          tags: ${{ steps.meta.outputs.tags }}       # 위 meta에서 만든 태그들
-          labels: ${{ steps.meta.outputs.labels }}
-          # 캐시 (BuildKit + GHA)
+          platforms: linux/amd64,linux/arm64   # ✅ 추가: 멀티빌드
+          tags: taehun2/bbb:${{ github.ref_name }}
+          build-args: |                       # ✅ 네가 쓰던 인자 그대로 유지
+            SPRING_PROFILES_ACTIVE=prod
+            DATABASE_NAME=${{ secrets.DATABASE_NAME }}
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            OAUTH_CLIENT_ID=${{ secrets.OAUTH_CLIENT_ID }}
+            OAUTH_SECRET_KEY=${{ secrets.OAUTH_SECRET_KEY }}
+            UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
+            KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # (선택) SBOM/프로비넌스
-          provenance: mode=max
-          sbom: true
-          # 빌드 인자 (정말 필요한 것만 — 민감정보는 가급적 넣지 마세요)
-          build-args: |
-            SPRING_PROFILES_ACTIVE=prod
 
-      # 5) 배포 데이터/서명 준비 (출력값 그대로 사용)
       - name: Prepare deployment data and signature
         id: prepare
         run: |
@@ -66,10 +51,20 @@ jobs:
           echo "deploy_json=$DEPLOY_JSON" >> $GITHUB_OUTPUT
           echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
 
-      # 6) 배포 트리거 (웹훅)
       - name: Trigger deployment
         run: |
           curl -X POST "${{ secrets.OFFICE_PC_WEBHOOK_URL }}/deploy" \
             -H "Content-Type: application/json" \
-            -H "X-Signature: ${{ steps.prepare.outputs.signature }}" \
-            -d '${{ steps.prepare.outputs.deploy_json }}'
+            -d '{
+              "image": "taehun2/bbb:${{ github.ref_name }}",
+              "env": {
+                "SPRING_PROFILES_ACTIVE": "prod",
+                "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
+                "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
+                "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
+                "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
+                "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
+                "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+              }
+            }'
