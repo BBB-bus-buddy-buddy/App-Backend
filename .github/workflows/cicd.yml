@@ -54,7 +54,6 @@ jobs:
       - name: Trigger deployment
         run: |
           curl -X POST "${{ secrets.OFFICE_PC_WEBHOOK_URL }}/deploy" \
-          curl -X POST "${{ secrets.SUB_SERVER_WEBHOOK_URL }}/deploy" \
             -H "Content-Type: application/json" \
             -d '{
               "image": "taehun2/bbb:${{ github.ref_name }}",
