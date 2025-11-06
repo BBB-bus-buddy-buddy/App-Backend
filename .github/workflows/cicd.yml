@@ -7,6 +7,11 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server: 
+          - ${{ secrets.OFFICE_PC_WEBHOOK_URL }}
+          - ${{ secrets.SUB_SERVER_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,9 +56,9 @@ jobs:
           echo "deploy_json=$DEPLOY_JSON" >> $GITHUB_OUTPUT
           echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
 
-      - name: Trigger deployment
+      - name: Deploy to server
         run: |
-          curl -X POST "${{ secrets.OFFICE_PC_WEBHOOK_URL }}/deploy" \
+          curl -X POST "${{ matrix.server }}/deploy" \
             -H "Content-Type: application/json" \
             -d '{
               "image": "taehun2/bbb:${{ github.ref_name }}",
