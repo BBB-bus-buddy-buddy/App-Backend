@@ -69,3 +69,23 @@ jobs:
                 "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
               }
             }'
+            
+      # ✅ SubServer 배포 (추가)
+      - name: Deploy to SubServer
+        run: |
+          curl -X POST "${{ secrets.SUB_SERVER_WEBHOOK_URL }}/deploy" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "image": "taehun2/bbb:${{ github.ref_name }}",
+              "env": {
+                "SPRING_PROFILES_ACTIVE": "prod",
+                "DATABASE_NAME": "${{ secrets.DATABASE_NAME}}",
+                "MONGODB_URI": "${{ secrets.MONGODB_URI }}",
+                "OAUTH_CLIENT_ID": "${{ secrets.OAUTH_CLIENT_ID }}",
+                "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
+                "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
+                "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+              }
+            }'
+      
