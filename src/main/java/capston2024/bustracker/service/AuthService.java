@@ -16,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Service;
@@ -288,6 +287,7 @@ public class AuthService {
         }
         return Map.of(
                 "인증 상태", true,
+                "id", user.getId(),
                 "name", user.getName(),
                 "email", user.getEmail(),
                 "role", user.getRoleKey(),
