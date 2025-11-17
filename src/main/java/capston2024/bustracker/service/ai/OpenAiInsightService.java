@@ -28,13 +28,13 @@ public class OpenAiInsightService implements AiInsightService {
 
     private final RestTemplateBuilder restTemplateBuilder;
 
-    @Value("${openai_api-url:https://api.openai.com/v1/chat/completions}")
+    @Value("${OPENAI_API_URI:https://api.openai.com/v1/chat/completions}")
     private String apiUrl;
 
-    @Value("${openai_api-key}")
+    @Value("${OPENAI_API_KEY}")
     private String apiKey;
 
-    @Value("${openai_model:gpt-4o-mini}")
+    @Value("${OPENAI_MODEL:gpt-4o-mini}")
     private String model;
 
     private RestTemplate restTemplate() {
