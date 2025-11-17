@@ -41,13 +41,16 @@ jobs:
             UNIV_API_KEY=${{ secrets.UNIV_API_KEY }}
             KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
+            OPENAI_API_URI=${{ secrets.OPENAI_API_URI }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Prepare deployment data and signature
         id: prepare
         run: |
-          DEPLOY_JSON="{\"image\":\"taehun2/bbb:${{ github.ref_name }}\",\"env\":{\"SPRING_PROFILES_ACTIVE\":\"prod\",\"DATABASE_NAME\":\"${{ secrets.DATABASE_NAME }}\",\"MONGODB_URI\":\"${{ secrets.MONGODB_URI }}\",\"OAUTH_CLIENT_ID\":\"${{ secrets.OAUTH_CLIENT_ID }}\",\"OAUTH_SECRET_KEY\":\"${{ secrets.OAUTH_SECRET_KEY }}\",\"UNIV_API_KEY\":\"${{ secrets.UNIV_API_KEY }}\",\"KAKAO_REST_API_KEY\":\"${{ secrets.KAKAO_REST_API_KEY }}\",\"JWT_SECRET\":\"${{ secrets.JWT_SECRET }}\"}}"
+          DEPLOY_JSON="{\"image\":\"taehun2/bbb:${{ github.ref_name }}\",\"env\":{\"SPRING_PROFILES_ACTIVE\":\"prod\",\"DATABASE_NAME\":\"${{ secrets.DATABASE_NAME }}\",\"MONGODB_URI\":\"${{ secrets.MONGODB_URI }}\",\"OAUTH_CLIENT_ID\":\"${{ secrets.OAUTH_CLIENT_ID }}\",\"OAUTH_SECRET_KEY\":\"${{ secrets.OAUTH_SECRET_KEY }}\",\"UNIV_API_KEY\":\"${{ secrets.UNIV_API_KEY }}\",\"KAKAO_REST_API_KEY\":\"${{ secrets.KAKAO_REST_API_KEY }}\",\"JWT_SECRET\":\"${{ secrets.JWT_SECRET }}\",\"OPENAI_API_URI\":\"${{ secrets.OPENAI_API_URI }}\",\"OPENAI_API_KEY\":\"${{ secrets.OPENAI_API_KEY }}\",\"OPENAI_MODEL\":\"${{ secrets.OPENAI_MODEL }}\"}}"
           SIGNATURE=$(echo -n "$DEPLOY_JSON" | openssl dgst -sha256 -hmac "${{ secrets.WEBHOOK_SECRET }}" | cut -d' ' -f2)
           echo "deploy_json=$DEPLOY_JSON" >> $GITHUB_OUTPUT
           echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
@@ -66,7 +69,10 @@ jobs:
                 "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
                 "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
                 "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
-                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}",
+                "OPENAI_API_URI": "${{ secrets.OPENAI_API_URI }}",
+                "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
+                "OPENAI_MODEL": "${{ secrets.OPENAI_MODEL }}"
               }
             }'
             
@@ -85,7 +91,10 @@ jobs:
                 "OAUTH_SECRET_KEY": "${{ secrets.OAUTH_SECRET_KEY }}",
                 "UNIV_API_KEY": "${{ secrets.UNIV_API_KEY }}",
                 "KAKAO_REST_API_KEY": "${{ secrets.KAKAO_REST_API_KEY }}",
-                "JWT_SECRET": "${{ secrets.JWT_SECRET }}"
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}",
+                "OPENAI_API_URI": "${{ secrets.OPENAI_API_URI }}",
+                "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
+                "OPENAI_MODEL": "${{ secrets.OPENAI_MODEL }}"
               }
             }'
       

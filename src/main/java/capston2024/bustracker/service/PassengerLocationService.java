@@ -4,7 +4,9 @@ import capston2024.bustracker.config.dto.BusBoardingDTO;
 import capston2024.bustracker.config.dto.BusRealTimeLocationDTO;
 import capston2024.bustracker.config.dto.PassengerLocationDTO;
 import capston2024.bustracker.domain.Bus;
+import capston2024.bustracker.domain.PassengerTripEvent;
 import capston2024.bustracker.repository.BusRepository;
+import capston2024.bustracker.repository.PassengerTripEventRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -25,6 +27,7 @@ public class PassengerLocationService {
 
     private final BusRepository busRepository;
     private final BusService busService;
+    private final PassengerTripEventRepository passengerTripEventRepository;
 
     // 승객별 상태 관리 (userId -> 상태 맵)
     private final Map<String, PassengerState> passengerStates = new ConcurrentHashMap<>();
@@ -390,6 +393,7 @@ public class PassengerLocationService {
                 state.setBoardingTime(System.currentTimeMillis());
                 state.resetBoardingDetectionCount();
                 state.resetAlightingDetectionCount();
+                recordTripEvent(state, busNumber, PassengerTripEvent.EventType.BOARD, null, null);
                 log.info("🎉 [탑승처리] 승객 자동 탑승 처리 완료! - 사용자: {}, 버스: {}",
                         state.getUserId(), busNumber);
                 return true;
@@ -432,6 +436,7 @@ public class PassengerLocationService {
                 state.setBoardingTime(null);
                 state.resetBoardingDetectionCount();
                 state.resetAlightingDetectionCount();
+                recordTripEvent(state, busNumber, PassengerTripEvent.EventType.ALIGHT, null, null);
                 log.info("🎉 [하차처리] 승객 자동 하차 처리 완료! - 사용자: {}, 버스: {}",
                         state.getUserId(), busNumber);
                 return true;
@@ -553,6 +558,54 @@ public class PassengerLocationService {
                         userId, alightingDetectionCount);
             }
             alightingDetectionCount = 0;
+        }
+    }
+
+    private void recordTripEvent(PassengerState state,
+                                 String busNumber,
+                                 PassengerTripEvent.EventType eventType,
+                                 Double distanceToBus,
+                                 Double estimatedSpeed) {
+        if (state == null) {
+            return;
+        }
+        try {
+            String stationId = resolveRecentStationId(busNumber, state.getOrganizationId());
+            PassengerTripEvent event = PassengerTripEvent.builder()
+                    .userId(state.getUserId())
+                    .organizationId(state.getOrganizationId())
+                    .busNumber(busNumber)
+                    .stationId(stationId)
+                    .eventType(eventType)
+                    .latitude(state.getLatitude())
+                    .longitude(state.getLongitude())
+                    .distanceToBus(distanceToBus)
+                    .estimatedBusSpeed(estimatedSpeed)
+                    .timestamp(System.currentTimeMillis())
+                    .metadata(Map.of(
+                            "source", "AUTO_DETECTION"
+                    ))
+                    .build();
+            passengerTripEventRepository.save(event);
+            log.debug("📝 [이벤트기록] 승객 이벤트 저장 완료 - userId={}, type={}, station={}",
+                    state.getUserId(), eventType, stationId);
+        } catch (Exception e) {
+            log.error("❌ [이벤트기록] 승객 이벤트 저장 실패 - 사용자: {}, 이벤트: {}, 오류: {}",
+                    state.getUserId(), eventType, e.getMessage(), e);
+        }
+    }
+
+    private String resolveRecentStationId(String busNumber, String organizationId) {
+        if (busNumber == null || organizationId == null) {
+            return null;
+        }
+        try {
+            Bus bus = busService.getBusByNumberAndOrganization(busNumber, organizationId);
+            return bus.getPrevStationId();
+        } catch (Exception e) {
+            log.debug("⚠️ [이벤트기록] 최근 정류장 조회 실패 - busNumber={}, organizationId={}, 오류={}",
+                    busNumber, organizationId, e.getMessage());
+            return null;
         }
     }
 }
