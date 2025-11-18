@@ -91,7 +91,7 @@ public class OpenAiInsightService implements AiInsightService {
         ));
 
         payload.put("messages", messages);
-        payload.put("temperature", 0.2);
+        // temperature 파라미터 제거: gpt-4o-mini 모델은 기본값(1)만 지원
         return payload;
     }
 
