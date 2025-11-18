@@ -1,17 +1,16 @@
 # 빌드 스테이지
 FROM eclipse-temurin:21-jdk AS build
 
-# 필요한 빌드 도구 설치
-RUN apt-get update && apt-get install -y \
-    findutils \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
-COPY . .
+
+COPY gradlew gradlew
+COPY gradle gradle
+COPY build.gradle settings.gradle .
+COPY src src
+
 RUN chmod +x ./gradlew
 
-# ARG 선언을 빌드 스테이지로 이동
-ARG SPRING_PROFILES_ACTIVE
+ARG SPRING_PROFILES_ACTIVE=prod
 ARG DATABASE_NAME
 ARG MONGODB_URI
 ARG OAUTH_CLIENT_ID
@@ -23,7 +22,6 @@ ARG OPENAI_API_URI
 ARG OPENAI_API_KEY
 ARG OPENAI_MODEL
 
-# Gradle 빌드 실행 시 환경 변수 전달
 RUN SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE} \
     DATABASE_NAME=${DATABASE_NAME} \
     MONGODB_URI=${MONGODB_URI} \
@@ -35,12 +33,25 @@ RUN SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE} \
     OPENAI_API_URI=${OPENAI_API_URI} \
     OPENAI_API_KEY=${OPENAI_API_KEY} \
     OPENAI_MODEL=${OPENAI_MODEL} \
-    ./gradlew build --no-daemon --info
+    ./gradlew clean bootJar -x test --no-daemon
 
 # 실행 스테이지
 FROM eclipse-temurin:21-jre
 WORKDIR /app
+
 COPY --from=build /app/build/libs/*.jar app.jar
+
+ARG SPRING_PROFILES_ACTIVE=prod
+ARG DATABASE_NAME
+ARG MONGODB_URI
+ARG OAUTH_CLIENT_ID
+ARG OAUTH_SECRET_KEY
+ARG UNIV_API_KEY
+ARG KAKAO_REST_API_KEY
+ARG JWT_SECRET
+ARG OPENAI_API_URI
+ARG OPENAI_API_KEY
+ARG OPENAI_MODEL
 
 ENV SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
 ENV DATABASE_NAME=${DATABASE_NAME}
@@ -53,6 +64,5 @@ ENV JWT_SECRET=${JWT_SECRET}
 ENV OPENAI_API_URI=${OPENAI_API_URI}
 ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 ENV OPENAI_MODEL=${OPENAI_MODEL}
-
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
