@@ -39,8 +39,8 @@ public class OpenAiInsightService implements AiInsightService {
 
     private RestTemplate restTemplate() {
         return restTemplateBuilder
-                .setConnectTimeout(Duration.ofSeconds(10))
-                .setReadTimeout(Duration.ofSeconds(30))
+                .setConnectTimeout(Duration.ofSeconds(15))
+                .setReadTimeout(Duration.ofSeconds(120))  // 2분으로 증가
                 .build();
     }
 
