@@ -117,6 +117,16 @@ public class StationInsightService {
                                                       long analysisStart,
                                                       long analysisEnd,
                                                       List<PassengerTripEvent> events) {
+        // 정류장 정보 조회 (좌표 포함)
+        Station currentStation = stationRepository.findById(stationId).orElse(null);
+        Double latitude = null;
+        Double longitude = null;
+
+        if (currentStation != null && currentStation.getLocation() != null) {
+            latitude = currentStation.getLocation().getY();
+            longitude = currentStation.getLocation().getX();
+        }
+
         long totalBoardings = events.stream()
                 .filter(event -> event.getEventType() == PassengerTripEvent.EventType.BOARD)
                 .count();
@@ -175,6 +185,8 @@ public class StationInsightService {
         return StationStatsResponseDTO.builder()
                 .stationId(stationId)
                 .stationName(resolveStationName(stationId))
+                .latitude(latitude)
+                .longitude(longitude)
                 .lookbackDays(lookbackDays)
                 .analysisStartTimestamp(analysisStart)
                 .analysisEndTimestamp(analysisEnd)
