@@ -14,6 +14,8 @@ import java.util.List;
 public class StationStatsResponseDTO {
     private String stationId;
     private String stationName;
+    private Double latitude;
+    private Double longitude;
     private int lookbackDays;
     private long analysisStartTimestamp;
     private long analysisEndTimestamp;
