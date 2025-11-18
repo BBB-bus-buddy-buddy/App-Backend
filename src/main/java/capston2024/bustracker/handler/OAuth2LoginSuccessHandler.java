@@ -8,15 +8,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Objects;
 
 /**
@@ -35,7 +34,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     // 앱 스킴 URL 정의
     private static final String DRIVER_IOS_APP_SCHEME_URL = "org.reactjs.native.example.driver://oauth2callback";
     private static final String DRIVER_ANDROID_APP_SCHEME_URL = "com.driver://oauth2callback";
-    private static final String IOS_APP_SCHEME_URI = "org.reactjs.native.example.Busbuddybuddy://oauth2callback";
+    private static final String IOS_APP_SCHEME_URI = "kr.devse.bbb.Busbuddybuddy://oauth2callback";
     private static final String ANDROID_APP_SCHEME_URI = "com.busbuddybuddy://oauth2callback";
     private static final long REFRESH_TOKEN_ROTATION_TIME = 1000 * 60 * 60 * 24 * 7L; // 7일
 
