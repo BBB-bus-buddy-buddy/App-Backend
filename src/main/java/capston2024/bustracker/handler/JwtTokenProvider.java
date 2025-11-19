@@ -56,6 +56,24 @@ public class JwtTokenProvider {
         return generateToken(authentication, ACCESS_TOKEN_EXPIRE_TIME);
     }
 
+    /**
+     * User 객체로부터 직접 액세스 토큰 생성 (Apple 로그인 등에서 사용)
+     */
+    public String createAccessTokenFromUser(User user) {
+        Date now = new Date();
+        Date expiredDate = new Date(now.getTime() + ACCESS_TOKEN_EXPIRE_TIME);
+
+        return Jwts.builder()
+                .setSubject(user.getEmail())
+                .claim(KEY_ROLE, user.getRoleKey())
+                .claim("email", user.getEmail())
+                .claim("organizationId", user.getOrganizationId())
+                .setIssuedAt(now)
+                .setExpiration(expiredDate)
+                .signWith(secretKey, SignatureAlgorithm.HS512)
+                .compact();
+    }
+
     public void generateRefreshToken(Authentication authentication, String accessToken) {
         String refreshToken = generateToken(authentication, REFRESH_TOKEN_EXPIRE_TIME);
         // 현재 시간 + REFRESH_TOKEN_EXPIRE_TIME으로 만료 시간 설정
