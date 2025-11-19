@@ -1,13 +1,17 @@
 package capston2024.bustracker.controller;
 
 import capston2024.bustracker.config.dto.ApiResponse;
+import capston2024.bustracker.config.dto.AppleLoginRequestDTO;
 import capston2024.bustracker.config.dto.CodeRequestDTO;
 import capston2024.bustracker.config.dto.DriverUpgradeRequestDTO;
 import capston2024.bustracker.domain.Driver;
+import capston2024.bustracker.domain.User;
 import capston2024.bustracker.domain.auth.DriverCreator;
 import capston2024.bustracker.exception.BusinessException;
 import capston2024.bustracker.exception.ResourceNotFoundException;
 import capston2024.bustracker.exception.UnauthorizedException;
+import capston2024.bustracker.handler.JwtTokenProvider;
+import capston2024.bustracker.service.AppleAuthService;
 import capston2024.bustracker.service.AuthService;
 import capston2024.bustracker.service.DriverService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,6 +51,80 @@ public class AuthController {
     private final AuthService authService;
     private final DriverService driverService;
     private final DriverCreator driverCreator;
+    private final AppleAuthService appleAuthService;
+    private final JwtTokenProvider jwtTokenProvider;
+
+    @PostMapping("/apple")
+    @Operation(summary = "Apple Sign In 인증",
+            description = "Apple에서 받은 Identity Token을 검증하고 JWT 토큰을 발급합니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Apple 인증 성공",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패 - 유효하지 않은 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 오류")
+    })
+    public ResponseEntity<ApiResponse<Map<String, String>>> appleLogin(
+            @Parameter(description = "Apple 로그인 요청 데이터") @RequestBody @Valid AppleLoginRequestDTO request) {
+
+        log.info("Apple 로그인 요청 - userId: {}", request.getUserId());
+
+        try {
+            // Apple Identity Token 검증 및 사용자 인증
+            User user = appleAuthService.authenticateWithApple(request);
+
+            // JWT 액세스 토큰 생성
+            String accessToken = jwtTokenProvider.createAccessTokenFromUser(user);
+
+            log.info("Apple 로그인 성공 - 사용자: {}, 역할: {}", user.getEmail(), user.getRole());
+
+            // 응답 데이터 구성
+            Map<String, String> responseData = new HashMap<>();
+            responseData.put("token", accessToken);
+            responseData.put("email", user.getEmail());
+            responseData.put("name", user.getName());
+            responseData.put("role", user.getRoleKey());
+
+            return ResponseEntity.ok(new ApiResponse<>(responseData, "Apple 로그인에 성공했습니다."));
+
+        } catch (UnauthorizedException e) {
+            log.error("Apple 인증 실패: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Apple 로그인 처리 중 오류 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>(null, "Apple 로그인 처리 중 오류가 발생했습니다."));
+        }
+    }
+
+    @PostMapping("/apple/verify")
+    @Operation(summary = "Apple Identity Token 검증 (테스트용)",
+            description = "Apple Identity Token의 유효성만 검증합니다. 사용자 생성은 하지 않습니다.")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "토큰 검증 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "토큰 검증 실패")
+    })
+    public ResponseEntity<ApiResponse<Boolean>> verifyAppleToken(
+            @Parameter(description = "Apple Identity Token") @RequestBody Map<String, String> request) {
+
+        String identityToken = request.get("identityToken");
+        log.info("Apple 토큰 검증 요청");
+
+        try {
+            boolean isValid = appleAuthService.verifyToken(identityToken);
+
+            if (isValid) {
+                return ResponseEntity.ok(new ApiResponse<>(true, "유효한 Apple Identity Token입니다."));
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new ApiResponse<>(false, "유효하지 않은 토큰입니다."));
+            }
+
+        } catch (Exception e) {
+            log.error("토큰 검증 중 오류 발생", e);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse<>(false, "토큰 검증에 실패했습니다: " + e.getMessage()));
+        }
+    }
 
     @GetMapping("/user")
     @Operation(summary = "사용자 정보 조회",
