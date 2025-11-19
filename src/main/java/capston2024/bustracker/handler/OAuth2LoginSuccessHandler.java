@@ -162,7 +162,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             }
             // 드라이버가 아닌 앱에서의 요청이면 사용자 앱으로 리다이렉트
             else {
-                appSchemeUri = Objects.requireNonNull(userAgent).contains("iPhone")
+                appSchemeUri = (Objects.requireNonNull(userAgent).contains("iPhone") || Objects.requireNonNull(userAgent).contains("iPad"))
                          ? IOS_APP_SCHEME_URI : ANDROID_APP_SCHEME_URI;
                 log.info("사용자 앱에서 로그인 - 사용자 앱으로 리다이렉트");
             }
