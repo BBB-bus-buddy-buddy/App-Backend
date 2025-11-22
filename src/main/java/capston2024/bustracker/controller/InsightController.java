@@ -3,6 +3,7 @@ package capston2024.bustracker.controller;
 import capston2024.bustracker.config.dto.ApiResponse;
 import capston2024.bustracker.config.dto.InsightQuestionRequestDTO;
 import capston2024.bustracker.config.dto.InsightQuestionResponseDTO;
+import capston2024.bustracker.config.dto.NetworkAnalysisRequestDTO;
 import capston2024.bustracker.config.dto.NetworkInsightResponseDTO;
 import capston2024.bustracker.config.dto.StationStatsResponseDTO;
 import capston2024.bustracker.service.StationInsightService;
@@ -44,10 +45,39 @@ public class InsightController {
     }
 
     @GetMapping("/network/analysis")
-    @Operation(summary = "네트워크 전체 혼잡 분석", description = "최근 기간 동안 가장 혼잡한 정류장, 증설 권장 정류장 등을 제공합니다.")
+    @Operation(summary = "네트워크 전체 혼잡 분석 (간단 필터)", description = "최근 기간 동안 가장 혼잡한 정류장, 노선별 통계, 시간대별 통계 등을 제공합니다.")
     public ResponseEntity<ApiResponse<NetworkInsightResponseDTO>> analyzeNetwork(
-            @Parameter(description = "분석 기간(일)", example = "7") @RequestParam(defaultValue = "7") int days) {
-        NetworkInsightResponseDTO stats = stationInsightService.analyzeNetwork(days);
+            @Parameter(description = "분석 기간(일)", example = "7") @RequestParam(required = false) Integer lookbackDays,
+            @Parameter(description = "시작 날짜 (YYYY-MM-DD)") @RequestParam(required = false) String startDate,
+            @Parameter(description = "종료 날짜 (YYYY-MM-DD)") @RequestParam(required = false) String endDate,
+            @Parameter(description = "조직 ID") @RequestParam(required = false) String organizationId,
+            @Parameter(description = "노선 ID (콤마 구분)") @RequestParam(required = false) String routeIds,
+            @Parameter(description = "정류장 ID (콤마 구분)") @RequestParam(required = false) String stationIds,
+            @Parameter(description = "집계 타입 (HOUR, DAY, WEEK, MONTH, DAY_OF_WEEK, ALL)") @RequestParam(required = false) String aggregationType,
+            @Parameter(description = "노선별 통계 포함") @RequestParam(required = false, defaultValue = "true") Boolean includeRouteStats,
+            @Parameter(description = "시간대별 통계 포함") @RequestParam(required = false, defaultValue = "true") Boolean includeTimeStats) {
+
+        NetworkAnalysisRequestDTO requestDTO = NetworkAnalysisRequestDTO.builder()
+                .lookbackDays(lookbackDays)
+                .startDate(startDate)
+                .endDate(endDate)
+                .organizationId(organizationId)
+                .routeIds(routeIds != null ? java.util.Arrays.asList(routeIds.split(",")) : null)
+                .stationIds(stationIds != null ? java.util.Arrays.asList(stationIds.split(",")) : null)
+                .aggregationType(aggregationType)
+                .includeRouteStats(includeRouteStats)
+                .includeTimeStats(includeTimeStats)
+                .build();
+
+        NetworkInsightResponseDTO stats = stationInsightService.analyzeNetworkWithFilters(requestDTO);
+        return ResponseEntity.ok(new ApiResponse<>(stats, "네트워크 분석 결과"));
+    }
+
+    @PostMapping("/network/analysis")
+    @Operation(summary = "네트워크 전체 혼잡 분석 (고급 필터)", description = "복잡한 필터를 사용한 네트워크 분석. 노선별, 시간대별, 요일별 등 상세 통계를 제공합니다.")
+    public ResponseEntity<ApiResponse<NetworkInsightResponseDTO>> analyzeNetworkAdvanced(
+            @RequestBody NetworkAnalysisRequestDTO requestDTO) {
+        NetworkInsightResponseDTO stats = stationInsightService.analyzeNetworkWithFilters(requestDTO);
         return ResponseEntity.ok(new ApiResponse<>(stats, "네트워크 분석 결과"));
     }
 
