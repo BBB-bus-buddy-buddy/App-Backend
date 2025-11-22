@@ -23,10 +23,12 @@ public class StationInsightService {
 
     private final PassengerTripEventRepository passengerTripEventRepository;
     private final StationRepository stationRepository;
+    private final capston2024.bustracker.repository.RouteRepository routeRepository;
     private final BusService busService;
     private final AiInsightService aiInsightService;
     private final ZoneId zoneId = ZoneId.systemDefault();
     private final Map<String, Integer> busSeatCache = new ConcurrentHashMap<>();
+    private final Map<String, String> stationToRouteCache = new ConcurrentHashMap<>();
 
     public StationStatsResponseDTO analyzeStation(String stationId, int lookbackDays) {
         long analysisEnd = System.currentTimeMillis();
@@ -465,5 +467,557 @@ public class StationInsightService {
                 .filter(station -> station.getOrganizationId() != null
                         && organizationIds.contains(station.getOrganizationId()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 필터를 적용한 네트워크 분석
+     */
+    public NetworkInsightResponseDTO analyzeNetworkWithFilters(NetworkAnalysisRequestDTO request) {
+        // 1. 날짜 범위 계산
+        DateRange dateRange = calculateDateRange(request);
+        long analysisStart = dateRange.startTimestamp;
+        long analysisEnd = dateRange.endTimestamp;
+
+        // 2. 필터링된 이벤트 조회
+        List<PassengerTripEvent> allEvents = passengerTripEventRepository
+                .findByTimestampBetween(analysisStart, analysisEnd);
+
+        // 3. 필터 적용
+        List<PassengerTripEvent> filteredEvents = applyFilters(allEvents, request);
+
+        // 4. 정류장별 집계
+        Map<String, StationAggregate> stationAggregates = aggregateByStation(filteredEvents);
+        List<StationSummaryDTO> allStationSummaries = new ArrayList<>(stationAggregates.values().stream()
+                .map(StationAggregate::toSummary)
+                .collect(Collectors.toList()));
+        appendStationsWithoutEvents(filteredEvents, allStationSummaries, stationAggregates);
+        allStationSummaries.sort(Comparator.comparingLong(StationSummaryDTO::getTotalBoardings).reversed());
+
+        List<StationSummaryDTO> busiestStations = allStationSummaries.stream()
+                .limit(5)
+                .collect(Collectors.toList());
+
+        List<StationSummaryDTO> overcrowdedStations = allStationSummaries.stream()
+                .filter(summary -> summary.getUtilizationRate() > 1.1)
+                .collect(Collectors.toList());
+
+        // 5. 노선별 통계 (옵션)
+        List<RouteSummaryDTO> routeSummaries = null;
+        List<RouteSummaryDTO> busiestRoutes = null;
+        if (Boolean.TRUE.equals(request.getIncludeRouteStats())) {
+            routeSummaries = aggregateByRoute(filteredEvents, stationAggregates);
+            busiestRoutes = routeSummaries.stream()
+                    .sorted(Comparator.comparingLong(RouteSummaryDTO::getTotalBoardings).reversed())
+                    .limit(5)
+                    .collect(Collectors.toList());
+        }
+
+        // 6. 시간대별 통계 (옵션)
+        List<TimeBasedStatsDTO> hourlyStats = null;
+        List<TimeBasedStatsDTO> dailyStats = null;
+        List<TimeBasedStatsDTO> weeklyStats = null;
+        List<TimeBasedStatsDTO> monthlyStats = null;
+        List<TimeBasedStatsDTO> dayOfWeekStats = null;
+
+        if (Boolean.TRUE.equals(request.getIncludeTimeStats())) {
+            String aggType = request.getAggregationType();
+            if (aggType == null || aggType.equalsIgnoreCase("ALL") || aggType.equalsIgnoreCase("HOUR")) {
+                hourlyStats = aggregateByHour(filteredEvents);
+            }
+            if (aggType == null || aggType.equalsIgnoreCase("ALL") || aggType.equalsIgnoreCase("DAY")) {
+                dailyStats = aggregateByDay(filteredEvents, analysisStart, analysisEnd);
+            }
+            if (aggType == null || aggType.equalsIgnoreCase("ALL") || aggType.equalsIgnoreCase("WEEK")) {
+                weeklyStats = aggregateByWeek(filteredEvents, analysisStart, analysisEnd);
+            }
+            if (aggType == null || aggType.equalsIgnoreCase("ALL") || aggType.equalsIgnoreCase("MONTH")) {
+                monthlyStats = aggregateByMonth(filteredEvents, analysisStart, analysisEnd);
+            }
+            if (aggType == null || aggType.equalsIgnoreCase("ALL") || aggType.equalsIgnoreCase("DAY_OF_WEEK")) {
+                dayOfWeekStats = aggregateByDayOfWeek(filteredEvents);
+            }
+        }
+
+        // 7. 권장 사항 생성
+        List<String> recommendations = buildNetworkRecommendations(busiestStations, overcrowdedStations);
+
+        // 8. 필터 정보
+        NetworkInsightResponseDTO.FilterInfoDTO appliedFilters = NetworkInsightResponseDTO.FilterInfoDTO.builder()
+                .organizationId(request.getOrganizationId())
+                .routeIds(request.getRouteIds())
+                .stationIds(request.getStationIds())
+                .aggregationType(request.getAggregationType())
+                .build();
+
+        return NetworkInsightResponseDTO.builder()
+                .lookbackDays(request.getLookbackDays() != null ? request.getLookbackDays() :
+                        (int) Duration.ofMillis(analysisEnd - analysisStart).toDays())
+                .analysisStartTimestamp(analysisStart)
+                .analysisEndTimestamp(analysisEnd)
+                .startDate(dateRange.startDate)
+                .endDate(dateRange.endDate)
+                .busiestStations(busiestStations)
+                .overcrowdedStations(overcrowdedStations)
+                .allStationSummaries(allStationSummaries)
+                .routeSummaries(routeSummaries)
+                .busiestRoutes(busiestRoutes)
+                .hourlyStats(hourlyStats)
+                .dailyStats(dailyStats)
+                .weeklyStats(weeklyStats)
+                .monthlyStats(monthlyStats)
+                .dayOfWeekStats(dayOfWeekStats)
+                .recommendations(recommendations)
+                .appliedFilters(appliedFilters)
+                .build();
+    }
+
+    /**
+     * 날짜 범위 계산
+     */
+    private DateRange calculateDateRange(NetworkAnalysisRequestDTO request) {
+        LocalDate endDate;
+        LocalDate startDate;
+
+        if (request.getEndDate() != null && !request.getEndDate().isBlank()) {
+            endDate = LocalDate.parse(request.getEndDate());
+        } else {
+            endDate = LocalDate.now(zoneId);
+        }
+
+        if (request.getStartDate() != null && !request.getStartDate().isBlank()) {
+            startDate = LocalDate.parse(request.getStartDate());
+        } else {
+            int lookbackDays = request.getLookbackDays() != null ? request.getLookbackDays() : 7;
+            startDate = endDate.minusDays(lookbackDays);
+        }
+
+        long startTimestamp = startDate.atStartOfDay(zoneId).toInstant().toEpochMilli();
+        long endTimestamp = endDate.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1;
+
+        return new DateRange(startDate.toString(), endDate.toString(), startTimestamp, endTimestamp);
+    }
+
+    /**
+     * 필터 적용
+     */
+    private List<PassengerTripEvent> applyFilters(List<PassengerTripEvent> events, NetworkAnalysisRequestDTO request) {
+        return events.stream()
+                .filter(event -> {
+                    // organizationId 필터
+                    if (request.getOrganizationId() != null && !request.getOrganizationId().isBlank()) {
+                        if (!request.getOrganizationId().equals(event.getOrganizationId())) {
+                            return false;
+                        }
+                    }
+
+                    // stationIds 필터
+                    if (request.getStationIds() != null && !request.getStationIds().isEmpty()) {
+                        if (event.getStationId() == null || !request.getStationIds().contains(event.getStationId())) {
+                            return false;
+                        }
+                    }
+
+                    // routeIds 필터 (정류장이 노선에 속하는지 확인)
+                    if (request.getRouteIds() != null && !request.getRouteIds().isEmpty()) {
+                        if (event.getStationId() == null) {
+                            return false;
+                        }
+                        String routeId = findRouteIdForStation(event.getStationId(), request.getRouteIds());
+                        if (routeId == null) {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 정류장별 집계
+     */
+    private Map<String, StationAggregate> aggregateByStation(List<PassengerTripEvent> events) {
+        Map<String, StationAggregate> aggregates = new HashMap<>();
+        for (PassengerTripEvent event : events) {
+            if (event.getStationId() == null) {
+                continue;
+            }
+            StationAggregate aggregate = aggregates.computeIfAbsent(event.getStationId(),
+                    id -> new StationAggregate(id, resolveStationName(id)));
+            aggregate.accumulate(event);
+        }
+        return aggregates;
+    }
+
+    /**
+     * 노선별 집계
+     */
+    private List<RouteSummaryDTO> aggregateByRoute(List<PassengerTripEvent> events,
+                                                     Map<String, StationAggregate> stationAggregates) {
+        Map<String, RouteAggregate> routeAggregates = new HashMap<>();
+
+        // 모든 노선 조회
+        List<capston2024.bustracker.domain.Route> allRoutes = routeRepository.findAll();
+        Map<String, capston2024.bustracker.domain.Route> routeMap = allRoutes.stream()
+                .collect(Collectors.toMap(capston2024.bustracker.domain.Route::getId, r -> r));
+
+        // 이벤트를 노선별로 그룹화
+        for (PassengerTripEvent event : events) {
+            if (event.getStationId() == null) {
+                continue;
+            }
+
+            // 정류장이 속한 노선 찾기
+            List<capston2024.bustracker.domain.Route> routes = allRoutes.stream()
+                    .filter(route -> route.getStations() != null && route.getStations().stream()
+                            .anyMatch(rs -> rs.getStationId() != null &&
+                                    event.getStationId().equals(rs.getStationId().getId())))
+                    .collect(Collectors.toList());
+
+            for (capston2024.bustracker.domain.Route route : routes) {
+                RouteAggregate aggregate = routeAggregates.computeIfAbsent(route.getId(),
+                        id -> new RouteAggregate(id, route.getRouteName()));
+                aggregate.accumulate(event);
+            }
+        }
+
+        // DTO로 변환
+        return routeAggregates.values().stream()
+                .map(agg -> {
+                    capston2024.bustracker.domain.Route route = routeMap.get(agg.routeId);
+                    List<StationSummaryDTO> topStations = new ArrayList<>();
+
+                    if (route != null && route.getStations() != null) {
+                        topStations = route.getStations().stream()
+                                .filter(rs -> rs.getStationId() != null)
+                                .map(rs -> stationAggregates.get(rs.getStationId().getId()))
+                                .filter(Objects::nonNull)
+                                .map(StationAggregate::toSummary)
+                                .sorted(Comparator.comparingLong(StationSummaryDTO::getTotalBoardings).reversed())
+                                .limit(5)
+                                .collect(Collectors.toList());
+                    }
+
+                    double utilization = calculateUtilization(agg.totalBoardings, agg.boardingsPerBus);
+                    String peakHour = agg.boardingsByHour.entrySet().stream()
+                            .sorted(Map.Entry.<Integer, Long>comparingByValue().reversed())
+                            .map(entry -> formatHourLabel(entry.getKey()))
+                            .findFirst()
+                            .orElse(null);
+
+                    return RouteSummaryDTO.builder()
+                            .routeId(agg.routeId)
+                            .routeName(agg.routeName)
+                            .totalBoardings(agg.totalBoardings)
+                            .totalAlightings(agg.totalAlightings)
+                            .utilizationRate(utilization)
+                            .peakHourLabel(peakHour)
+                            .topStations(topStations)
+                            .recommendation(buildRouteRecommendation(utilization, agg.totalBoardings))
+                            .build();
+                })
+                .sorted(Comparator.comparingLong(RouteSummaryDTO::getTotalBoardings).reversed())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 시간대별 집계 (0-23시)
+     */
+    private List<TimeBasedStatsDTO> aggregateByHour(List<PassengerTripEvent> events) {
+        Map<Integer, TimeAggregateData> hourlyData = new HashMap<>();
+
+        for (PassengerTripEvent event : events) {
+            LocalDateTime dateTime = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(event.getTimestamp()), zoneId);
+            int hour = dateTime.getHour();
+
+            TimeAggregateData data = hourlyData.computeIfAbsent(hour, h -> new TimeAggregateData());
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                data.totalBoardings++;
+                BusKey key = buildBusKey(event.getBusNumber(), event.getOrganizationId());
+                if (key != null) {
+                    data.boardingsPerBus.merge(key, 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                data.totalAlightings++;
+            }
+        }
+
+        return hourlyData.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    int hour = entry.getKey();
+                    TimeAggregateData data = entry.getValue();
+                    return TimeBasedStatsDTO.builder()
+                            .label(formatHourLabel(hour))
+                            .timestamp((long) hour)
+                            .totalBoardings(data.totalBoardings)
+                            .totalAlightings(data.totalAlightings)
+                            .netPassengers(data.totalBoardings - data.totalAlightings)
+                            .utilizationRate(calculateUtilization(data.totalBoardings, data.boardingsPerBus))
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 일별 집계
+     */
+    private List<TimeBasedStatsDTO> aggregateByDay(List<PassengerTripEvent> events, long startTimestamp, long endTimestamp) {
+        Map<LocalDate, TimeAggregateData> dailyData = new HashMap<>();
+
+        for (PassengerTripEvent event : events) {
+            LocalDate date = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(event.getTimestamp()), zoneId).toLocalDate();
+
+            TimeAggregateData data = dailyData.computeIfAbsent(date, d -> new TimeAggregateData());
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                data.totalBoardings++;
+                BusKey key = buildBusKey(event.getBusNumber(), event.getOrganizationId());
+                if (key != null) {
+                    data.boardingsPerBus.merge(key, 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                data.totalAlightings++;
+            }
+        }
+
+        return dailyData.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    LocalDate date = entry.getKey();
+                    TimeAggregateData data = entry.getValue();
+                    return TimeBasedStatsDTO.builder()
+                            .label(date.toString())
+                            .timestamp(date.atStartOfDay(zoneId).toInstant().toEpochMilli())
+                            .totalBoardings(data.totalBoardings)
+                            .totalAlightings(data.totalAlightings)
+                            .netPassengers(data.totalBoardings - data.totalAlightings)
+                            .utilizationRate(calculateUtilization(data.totalBoardings, data.boardingsPerBus))
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 주차별 집계
+     */
+    private List<TimeBasedStatsDTO> aggregateByWeek(List<PassengerTripEvent> events, long startTimestamp, long endTimestamp) {
+        Map<String, TimeAggregateData> weeklyData = new HashMap<>();
+
+        for (PassengerTripEvent event : events) {
+            LocalDate date = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(event.getTimestamp()), zoneId).toLocalDate();
+
+            // ISO 주차 계산 (년도-주차)
+            int year = date.getYear();
+            int weekOfYear = getWeekOfYear(date);
+            String weekKey = String.format("%d-W%02d", year, weekOfYear);
+
+            TimeAggregateData data = weeklyData.computeIfAbsent(weekKey, w -> new TimeAggregateData());
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                data.totalBoardings++;
+                BusKey key = buildBusKey(event.getBusNumber(), event.getOrganizationId());
+                if (key != null) {
+                    data.boardingsPerBus.merge(key, 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                data.totalAlightings++;
+            }
+        }
+
+        return weeklyData.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    String weekKey = entry.getKey();
+                    TimeAggregateData data = entry.getValue();
+                    return TimeBasedStatsDTO.builder()
+                            .label(weekKey)
+                            .timestamp(null)
+                            .totalBoardings(data.totalBoardings)
+                            .totalAlightings(data.totalAlightings)
+                            .netPassengers(data.totalBoardings - data.totalAlightings)
+                            .utilizationRate(calculateUtilization(data.totalBoardings, data.boardingsPerBus))
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 월별 집계
+     */
+    private List<TimeBasedStatsDTO> aggregateByMonth(List<PassengerTripEvent> events, long startTimestamp, long endTimestamp) {
+        Map<String, TimeAggregateData> monthlyData = new HashMap<>();
+
+        for (PassengerTripEvent event : events) {
+            LocalDate date = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(event.getTimestamp()), zoneId).toLocalDate();
+
+            String monthKey = String.format("%d-%02d", date.getYear(), date.getMonthValue());
+
+            TimeAggregateData data = monthlyData.computeIfAbsent(monthKey, m -> new TimeAggregateData());
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                data.totalBoardings++;
+                BusKey key = buildBusKey(event.getBusNumber(), event.getOrganizationId());
+                if (key != null) {
+                    data.boardingsPerBus.merge(key, 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                data.totalAlightings++;
+            }
+        }
+
+        return monthlyData.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    String monthKey = entry.getKey();
+                    TimeAggregateData data = entry.getValue();
+                    return TimeBasedStatsDTO.builder()
+                            .label(monthKey)
+                            .timestamp(null)
+                            .totalBoardings(data.totalBoardings)
+                            .totalAlightings(data.totalAlightings)
+                            .netPassengers(data.totalBoardings - data.totalAlightings)
+                            .utilizationRate(calculateUtilization(data.totalBoardings, data.boardingsPerBus))
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 요일별 집계
+     */
+    private List<TimeBasedStatsDTO> aggregateByDayOfWeek(List<PassengerTripEvent> events) {
+        Map<DayOfWeek, TimeAggregateData> dayOfWeekData = new HashMap<>();
+
+        for (PassengerTripEvent event : events) {
+            DayOfWeek dayOfWeek = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(event.getTimestamp()), zoneId).getDayOfWeek();
+
+            TimeAggregateData data = dayOfWeekData.computeIfAbsent(dayOfWeek, d -> new TimeAggregateData());
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                data.totalBoardings++;
+                BusKey key = buildBusKey(event.getBusNumber(), event.getOrganizationId());
+                if (key != null) {
+                    data.boardingsPerBus.merge(key, 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                data.totalAlightings++;
+            }
+        }
+
+        return dayOfWeekData.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    DayOfWeek dayOfWeek = entry.getKey();
+                    TimeAggregateData data = entry.getValue();
+                    return TimeBasedStatsDTO.builder()
+                            .label(dayOfWeek.name())
+                            .timestamp((long) dayOfWeek.getValue())
+                            .totalBoardings(data.totalBoardings)
+                            .totalAlightings(data.totalAlightings)
+                            .netPassengers(data.totalBoardings - data.totalAlightings)
+                            .utilizationRate(calculateUtilization(data.totalBoardings, data.boardingsPerBus))
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 정류장이 속한 노선 ID 찾기 (캐시 사용)
+     */
+    private String findRouteIdForStation(String stationId, List<String> routeIds) {
+        String cacheKey = stationId + ":" + String.join(",", routeIds);
+        return stationToRouteCache.computeIfAbsent(cacheKey, key -> {
+            for (String routeId : routeIds) {
+                Optional<capston2024.bustracker.domain.Route> route = routeRepository.findById(routeId);
+                if (route.isPresent() && route.get().getStations() != null) {
+                    boolean hasStation = route.get().getStations().stream()
+                            .anyMatch(rs -> rs.getStationId() != null && stationId.equals(rs.getStationId().getId()));
+                    if (hasStation) {
+                        return routeId;
+                    }
+                }
+            }
+            return null;
+        });
+    }
+
+    /**
+     * 노선에 대한 권장 사항 생성
+     */
+    private String buildRouteRecommendation(double utilizationRate, long totalBoardings) {
+        if (totalBoardings == 0) {
+            return "최근 탑승 데이터가 부족합니다.";
+        }
+        if (utilizationRate > 1.2) {
+            return String.format("이용률 %.0f%%로 극심한 혼잡. 노선 증설 또는 배차 간격 단축 권장.", utilizationRate * 100);
+        }
+        if (utilizationRate > 1.0) {
+            return String.format("이용률 %.0f%%로 좌석 여유가 부족합니다. 배차 간격 조정 검토.", utilizationRate * 100);
+        }
+        if (utilizationRate > 0.7) {
+            return String.format("이용률 %.0f%%로 안정적입니다.", utilizationRate * 100);
+        }
+        return "혼잡도가 낮아 현재 용량으로 충분합니다.";
+    }
+
+    /**
+     * 주차 계산 (ISO 8601 기준)
+     */
+    private int getWeekOfYear(LocalDate date) {
+        java.time.temporal.WeekFields weekFields = java.time.temporal.WeekFields.ISO;
+        return date.get(weekFields.weekOfWeekBasedYear());
+    }
+
+    // 헬퍼 클래스들
+    private static class DateRange {
+        final String startDate;
+        final String endDate;
+        final long startTimestamp;
+        final long endTimestamp;
+
+        DateRange(String startDate, String endDate, long startTimestamp, long endTimestamp) {
+            this.startDate = startDate;
+            this.endDate = endDate;
+            this.startTimestamp = startTimestamp;
+            this.endTimestamp = endTimestamp;
+        }
+    }
+
+    private static class RouteAggregate {
+        final String routeId;
+        final String routeName;
+        long totalBoardings;
+        long totalAlightings;
+        final Map<Integer, Long> boardingsByHour = new HashMap<>();
+        final Map<BusKey, Long> boardingsPerBus = new HashMap<>();
+
+        RouteAggregate(String routeId, String routeName) {
+            this.routeId = routeId;
+            this.routeName = routeName;
+        }
+
+        void accumulate(PassengerTripEvent event) {
+            if (event.getEventType() == PassengerTripEvent.EventType.BOARD) {
+                totalBoardings++;
+                LocalDateTime dateTime = LocalDateTime.ofInstant(
+                        Instant.ofEpochMilli(event.getTimestamp()), ZoneId.systemDefault());
+                boardingsByHour.merge(dateTime.getHour(), 1L, Long::sum);
+                String busNumber = event.getBusNumber();
+                String orgId = event.getOrganizationId();
+                if (busNumber != null && orgId != null) {
+                    boardingsPerBus.merge(new BusKey(busNumber, orgId), 1L, Long::sum);
+                }
+            } else if (event.getEventType() == PassengerTripEvent.EventType.ALIGHT) {
+                totalAlightings++;
+            }
+        }
+    }
+
+    private static class TimeAggregateData {
+        long totalBoardings;
+        long totalAlightings;
+        final Map<BusKey, Long> boardingsPerBus = new HashMap<>();
     }
 }
