@@ -156,8 +156,9 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             String appSchemeUri;
 
             if (isDriverApp) {
-                appSchemeUri = userAgent.contains("Android") ?
-                        DRIVER_ANDROID_APP_SCHEME_URL : DRIVER_IOS_APP_SCHEME_URL;
+                // 사용자 앱과 동일한 로직: iPhone/iPad 체크 후 Android가 기본값
+                appSchemeUri = (userAgent != null && (userAgent.contains("iPhone") || userAgent.contains("iPad")))
+                        ? DRIVER_IOS_APP_SCHEME_URL : DRIVER_ANDROID_APP_SCHEME_URL;
                 log.info("드라이버 앱에서 로그인 - 드라이버 앱으로 리다이렉트");
             }
             // 드라이버가 아닌 앱에서의 요청이면 사용자 앱으로 리다이렉트
