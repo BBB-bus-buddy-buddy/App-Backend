@@ -636,13 +636,21 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         String busNumber = sessionToBusMap.get(session.getId());
+        String clientIp = (String) session.getAttributes().get("CLIENT_IP");
 
         log.error("❌ ========== WebSocket 통신 오류 ==========");
         log.error("❌ 세션 ID: {}", session.getId());
         log.error("❌ 버스 번호: {}", busNumber != null ? busNumber : "미등록");
+        log.error("❌ 클라이언트 IP: {}", clientIp);
         log.error("❌ 오류 메시지: {}", exception.getMessage());
         log.error("❌ 스택 트레이스:", exception);
         log.error("❌ ======================================");
+
+        // IP별 연결 수 감소 (세션 종료 전에 먼저 처리)
+        if (clientIp != null) {
+            ConnectionLimitInterceptor.decrementConnection(clientIp);
+            log.info("🔢 오류로 인한 IP 연결 수 감소: IP = {}", clientIp);
+        }
 
         // 오류 발생 시 세션 정리
         try {
