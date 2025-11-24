@@ -47,6 +47,8 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     private final Map<String, String> sessionToOrgMap = new ConcurrentHashMap<>();
     // 세션과 사용자 ID 매핑
     private final Map<String, String> sessionToUserMap = new ConcurrentHashMap<>();
+    // 사용자 ID와 세션 역매핑 (중복 연결 방지용)
+    private final Map<String, String> userToSessionMap = new ConcurrentHashMap<>();
     // 마지막 활동 시간 추적
     private final Map<String, Instant> lastActivityMap = new ConcurrentHashMap<>();
 
@@ -110,6 +112,17 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
 
         log.info("🔴 [승객WebSocket] 연결 종료 시작: 세션 ID = {}, 조직 ID = {}, 사용자 ID = {}, 상태 = {}",
                 sessionId, organizationId, userId, status.getCode());
+
+        // 사용자 ID 역매핑 제거 (중복 연결 방지용)
+        if (userId != null) {
+            String mappedSessionId = userToSessionMap.get(userId);
+            if (sessionId.equals(mappedSessionId)) {
+                userToSessionMap.remove(userId);
+                log.debug("🧹 [승객WebSocket] 사용자 ID 역매핑 제거: 사용자 ID = {}", userId);
+            } else {
+                log.debug("ℹ️ [승객WebSocket] 사용자 ID 역매핑 불일치 (이미 새 세션으로 대체됨): 사용자 ID = {}", userId);
+            }
+        }
 
         // ===== 중요: 승객 강제 하차 처리 =====
         if (userId != null) {
@@ -422,9 +435,45 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
 
             log.info("📋 [승객WebSocket] PassengerLocationDTO 생성 완료: {}", locationDTO);
 
-            // 사용자 ID 저장
+            // ===== 중복 세션 체크 및 이전 세션 강제 종료 =====
+            String existingSessionId = userToSessionMap.get(userId);
+            if (existingSessionId != null && !existingSessionId.equals(sessionId)) {
+                log.warn("🚨 [중복연결] 사용자 {}의 이전 세션 발견 - 강제 종료: 이전 세션 ID = {}, 새 세션 ID = {}",
+                        userId, existingSessionId, sessionId);
+
+                // 이전 세션 찾기 및 강제 종료
+                boolean closedOldSession = false;
+                for (Set<WebSocketSession> sessions : organizationSessions.values()) {
+                    for (WebSocketSession oldSession : sessions) {
+                        if (oldSession.getId().equals(existingSessionId)) {
+                            try {
+                                log.info("🔴 [중복연결] 이전 세션 강제 종료 시작: 세션 ID = {}", existingSessionId);
+                                oldSession.close(CloseStatus.GOING_AWAY);
+                                closedOldSession = true;
+                                log.info("✅ [중복연결] 이전 세션 강제 종료 완료: 세션 ID = {}", existingSessionId);
+                                break;
+                            } catch (Exception e) {
+                                log.error("❌ [중복연결] 이전 세션 종료 실패: 세션 ID = {}, 오류 = {}",
+                                        existingSessionId, e.getMessage());
+                            }
+                        }
+                    }
+                    if (closedOldSession) break;
+                }
+
+                if (!closedOldSession) {
+                    log.warn("⚠️ [중복연결] 이전 세션을 찾지 못함 - 강제 정리: 세션 ID = {}", existingSessionId);
+                    // 매핑만 정리
+                    String oldOrgId = sessionToOrgMap.remove(existingSessionId);
+                    sessionToUserMap.remove(existingSessionId);
+                    lastActivityMap.remove(existingSessionId);
+                }
+            }
+
+            // 사용자 ID 저장 (양방향 매핑)
             sessionToUserMap.put(sessionId, userId);
-            log.debug("💾 [승객WebSocket] 사용자 ID 저장: 세션 ID = {}, 사용자 ID = {}", sessionId, userId);
+            userToSessionMap.put(userId, sessionId);
+            log.info("💾 [승객WebSocket] 사용자 ID 매핑 저장: 세션 ID = {}, 사용자 ID = {}", sessionId, userId);
 
             // ========================= [수정된 부분 시작] =========================
             log.info("🚀 [승객WebSocket] PassengerLocationService 호출 시작");
