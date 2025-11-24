@@ -1064,20 +1064,42 @@ public class BusService {
     }
 
     /**
-     * 버스 비활성 상태 업데이트
+     * 버스 비활성 상태 업데이트 및 모든 승객 강제 하차
      */
-    public void updateBusInactiveStatus(String busNumber) {
+    public void updateBusInactiveStatus(String busNumber, String organizationId) {
         try {
-            // 현재는 로그만 남김 - 필요시 DB 업데이트 로직 추가
-            log.info("버스 {} 비활성 상태로 업데이트", busNumber);
+            log.info("🔴 [버스비활성] 버스 비활성 상태로 업데이트 시작 - 버스: {}, 조직: {}", busNumber, organizationId);
+
+            // 버스의 모든 승객 강제 하차 처리
+            if (organizationId != null) {
+                try {
+                    PassengerLocationService passengerLocationService =
+                            applicationContext.getBean(PassengerLocationService.class);
+
+                    int alightedCount = passengerLocationService.forceAlightAllPassengersOnBus(busNumber, organizationId);
+
+                    if (alightedCount > 0) {
+                        log.warn("🚨 [버스비활성] 버스 운영 종료로 {}명 강제 하차 처리 완료 - 버스: {}",
+                                alightedCount, busNumber);
+                    } else {
+                        log.info("ℹ️ [버스비활성] 하차 처리할 승객 없음 - 버스: {}", busNumber);
+                    }
+                } catch (Exception e) {
+                    log.error("❌ [버스비활성] 승객 강제 하차 처리 중 오류 발생 - 버스: {}, 오류: {}",
+                            busNumber, e.getMessage(), e);
+                }
+            }
 
             // 향후 확장: DB에서 버스 상태를 'INACTIVE'로 업데이트
             // Bus bus = getBusByNumberAndOrganization(busNumber, organizationId);
-            // bus.setActive(false);
+            // bus.setOperate(false);
             // busRepository.save(bus);
 
+            log.info("✅ [버스비활성] 버스 비활성 처리 완료 - 버스: {}", busNumber);
+
         } catch (Exception e) {
-            log.error("버스 비활성 상태 업데이트 실패: {}", e.getMessage());
+            log.error("❌ [버스비활성] 버스 비활성 상태 업데이트 실패: 버스 = {}, 오류 = {}",
+                    busNumber, e.getMessage());
         }
     }
 
