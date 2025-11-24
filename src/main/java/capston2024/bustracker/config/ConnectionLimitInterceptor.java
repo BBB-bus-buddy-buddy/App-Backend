@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class ConnectionLimitInterceptor implements HandshakeInterceptor {
 
-    private static final int MAX_CONNECTIONS_PER_IP = 10; // IP당 최대 연결 수
+    private static final int MAX_CONNECTIONS_PER_IP = 100; // IP당 최대 연결 수 (대규모 동시 접속 대응)
     private static final Map<String, AtomicInteger> connectionCounts = new ConcurrentHashMap<>();
 
     @Override
@@ -41,7 +41,13 @@ public class ConnectionLimitInterceptor implements HandshakeInterceptor {
     @Override
     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                WebSocketHandler wsHandler, Exception exception) {
-        // 핸드셰이크 후 처리
+        // 핸드셰이크 실패 시 카운트 감소
+        if (exception != null) {
+            String clientIp = getClientIp(request);
+            decrementConnection(clientIp);
+            log.warn("Handshake failed for IP: {}, connection count decremented. Error: {}",
+                    clientIp, exception.getMessage());
+        }
     }
 
     private String getClientIp(ServerHttpRequest request) {
