@@ -111,6 +111,23 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
         log.info("🔴 [승객WebSocket] 연결 종료 시작: 세션 ID = {}, 조직 ID = {}, 사용자 ID = {}, 상태 = {}",
                 sessionId, organizationId, userId, status.getCode());
 
+        // ===== 중요: 승객 강제 하차 처리 =====
+        if (userId != null) {
+            try {
+                PassengerLocationService passengerService = getPassengerLocationService();
+                boolean forceAlighted = passengerService.forceAlightPassenger(userId);
+
+                if (forceAlighted) {
+                    log.warn("🚨 [승객WebSocket] 연결 종료로 인한 강제 하차 완료: 사용자 ID = {}", userId);
+                } else {
+                    log.info("ℹ️ [승객WebSocket] 강제 하차 불필요 (미탑승 또는 이미 하차): 사용자 ID = {}", userId);
+                }
+            } catch (Exception e) {
+                log.error("❌ [승객WebSocket] 강제 하차 처리 중 오류 발생: 사용자 ID = {}, 오류 = {}",
+                        userId, e.getMessage(), e);
+            }
+        }
+
         if (organizationId != null) {
             Set<WebSocketSession> sessions = organizationSessions.get(organizationId);
             if (sessions != null) {
