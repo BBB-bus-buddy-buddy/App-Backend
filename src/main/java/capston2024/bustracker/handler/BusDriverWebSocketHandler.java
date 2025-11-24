@@ -117,11 +117,11 @@ public class BusDriverWebSocketHandler extends TextWebSocketHandler {
             ConnectionLimitInterceptor.decrementConnection(clientIp);
         }
 
-        // 버스 상태를 비활성으로 업데이트
-        if (busNumber != null) {
+        // 버스 상태를 비활성으로 업데이트 및 모든 승객 강제 하차
+        if (busNumber != null && organizationId != null) {
             try {
-                busService.updateBusInactiveStatus(busNumber);
-                log.info("🔴 버스 {} 비활성 상태로 변경됨", busNumber);
+                busService.updateBusInactiveStatus(busNumber, organizationId);
+                log.info("🔴 버스 {} 비활성 상태로 변경됨 (조직: {})", busNumber, organizationId);
             } catch (Exception e) {
                 log.error("❌ 버스 비활성 상태 업데이트 실패: {}", e.getMessage());
             }

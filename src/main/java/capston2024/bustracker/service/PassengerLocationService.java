@@ -56,6 +56,92 @@ public class PassengerLocationService {
     }
 
     /**
+     * 승객 강제 하차 처리 (WebSocket 연결 종료 시 호출)
+     * @param userId 승객 ID
+     * @return 하차 처리 성공 여부
+     */
+    public boolean forceAlightPassenger(String userId) {
+        log.info("🚨 [강제하차] 강제 하차 처리 시작 - 사용자: {}", userId);
+
+        PassengerState state = passengerStates.get(userId);
+
+        if (state == null) {
+            log.info("ℹ️ [강제하차] 승객 상태 없음 - 사용자: {} (이미 하차했거나 탑승 기록 없음)", userId);
+            return false;
+        }
+
+        if (!state.isOnBus()) {
+            log.info("ℹ️ [강제하차] 승객이 이미 하차 상태 - 사용자: {}", userId);
+            // 상태 정리
+            passengerStates.remove(userId);
+            return false;
+        }
+
+        String busNumber = state.getCurrentBusNumber();
+        String organizationId = state.getOrganizationId();
+
+        log.warn("⚠️ [강제하차] 승객이 버스에 탑승 중 - 강제 하차 처리 - 사용자: {}, 버스: {}", userId, busNumber);
+
+        boolean success = processAlighting(state, busNumber, organizationId);
+
+        if (success) {
+            log.info("✅ [강제하차] 강제 하차 처리 완료 - 사용자: {}, 버스: {}", userId, busNumber);
+            // 상태 완전히 제거
+            passengerStates.remove(userId);
+        } else {
+            log.error("❌ [강제하차] 강제 하차 처리 실패 - 사용자: {}, 버스: {}", userId, busNumber);
+            // 실패해도 상태는 제거 (더 이상 추적 안 함)
+            passengerStates.remove(userId);
+        }
+
+        return success;
+    }
+
+    /**
+     * 승객 상태 완전 제거 (앱 종료 시 호출)
+     * @param userId 승객 ID
+     */
+    public void removePassengerState(String userId) {
+        PassengerState removed = passengerStates.remove(userId);
+        if (removed != null) {
+            log.info("🧹 [상태제거] 승객 상태 제거 완료 - 사용자: {}, 탑승상태: {}, 버스: {}",
+                    userId, removed.isOnBus(), removed.getCurrentBusNumber());
+        }
+    }
+
+    /**
+     * 특정 버스의 모든 승객 강제 하차 (버스 운영 종료 시 호출)
+     * @param busNumber 버스 번호
+     * @param organizationId 조직 ID
+     * @return 하차 처리된 승객 수
+     */
+    public int forceAlightAllPassengersOnBus(String busNumber, String organizationId) {
+        log.info("🚨 [버스하차] 버스 운영 종료 - 모든 승객 강제 하차 시작 - 버스: {}", busNumber);
+
+        int count = 0;
+        for (Map.Entry<String, PassengerState> entry : passengerStates.entrySet()) {
+            PassengerState state = entry.getValue();
+
+            if (state.isOnBus() &&
+                busNumber.equals(state.getCurrentBusNumber()) &&
+                organizationId.equals(state.getOrganizationId())) {
+
+                String userId = entry.getKey();
+                log.warn("⚠️ [버스하차] 승객 강제 하차 - 사용자: {}, 버스: {}", userId, busNumber);
+
+                boolean success = processAlighting(state, busNumber, organizationId);
+                if (success) {
+                    count++;
+                    passengerStates.remove(userId);
+                }
+            }
+        }
+
+        log.info("✅ [버스하차] 버스 운영 종료 - 총 {}명 강제 하차 완료 - 버스: {}", count, busNumber);
+        return count;
+    }
+
+    /**
      * 승객 위치 정보 처리 - 배터리 최적화 및 정확도 개선
      * @param locationDTO 승객 위치 정보
      * @return 자동 탑승/하차 감지 여부
