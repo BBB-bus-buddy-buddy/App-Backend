@@ -468,12 +468,19 @@ public class BusPassengerWebSocketHandler extends TextWebSocketHandler {
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         String userId = sessionToUserMap.get(session.getId());
         String organizationId = sessionToOrgMap.get(session.getId());
+        String clientIp = (String) session.getAttributes().get("CLIENT_IP");
 
-        log.error("⚠️ [승객WebSocket] 통신 오류: 세션 ID = {}, 사용자 ID = {}, 조직 ID = {}, 오류 = {}",
-                session.getId(), userId, organizationId, exception.getMessage());
+        log.error("⚠️ [승객WebSocket] 통신 오류: 세션 ID = {}, 사용자 ID = {}, 조직 ID = {}, 클라이언트 IP = {}, 오류 = {}",
+                session.getId(), userId, organizationId, clientIp, exception.getMessage());
 
         if (exception != null) {
             log.error("🔍 [승객WebSocket] 상세 스택 트레이스:", exception);
+        }
+
+        // IP별 연결 수 감소 (세션 종료 전에 먼저 처리)
+        if (clientIp != null) {
+            ConnectionLimitInterceptor.decrementConnection(clientIp);
+            log.info("🔢 [승객WebSocket] 오류로 인한 IP 연결 수 감소: IP = {}", clientIp);
         }
 
         // 오류 발생 시 세션 정리
